@@ -18,7 +18,7 @@ Edit the files in any editor — the app watches for changes and updates live.
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/DayPilot.git
+git clone https://github.com/tommyvahabov/DayPilot.git
 cd DayPilot
 swift build -c release
 ```
