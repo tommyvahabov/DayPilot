@@ -92,6 +92,30 @@ final class ScheduleStore {
     }
 
     /// Uncomplete a task by title match (used by Flight Log where we don't have lineIndex)
+    func setDailyCapacity(_ capacity: String) {
+        guard FileManager.default.fileExists(atPath: memoryPath) else { return }
+        guard var content = try? String(contentsOfFile: memoryPath, encoding: .utf8) else { return }
+
+        if content.range(of: "^daily_capacity:.*", options: .regularExpression, range: content.startIndex..<content.endIndex) != nil {
+            content = content.replacingOccurrences(
+                of: "daily_capacity:.*",
+                with: "daily_capacity: \(capacity)",
+                options: .regularExpression
+            )
+        } else if content.contains("## Settings") {
+            content = content.replacingOccurrences(
+                of: "## Settings",
+                with: "## Settings\ndaily_capacity: \(capacity)"
+            )
+        } else {
+            content += "\n## Settings\ndaily_capacity: \(capacity)\n"
+        }
+
+        fileWatcher?.isSelfEditing = true
+        try? content.write(toFile: memoryPath, atomically: true, encoding: .utf8)
+        recompute()
+    }
+
     func uncompleteByTitle(_ title: String) {
         fileWatcher?.isSelfEditing = true
         for (i, line) in rawTodoLines.enumerated() {

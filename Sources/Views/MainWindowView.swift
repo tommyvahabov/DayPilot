@@ -3,11 +3,13 @@ import SwiftUI
 enum SidebarTab: String, CaseIterable {
     case runway = "Runway"
     case flightLog = "Flight Log"
+    case settings = "Settings"
 
     var icon: String {
         switch self {
         case .runway: return "airplane.departure"
         case .flightLog: return "book.closed"
+        case .settings: return "gearshape"
         }
     }
 }
@@ -42,6 +44,9 @@ struct MainWindowView: View {
 
                 case .flightLog:
                     FlightLogView(store: store)
+
+                case .settings:
+                    SettingsView(store: store)
                 }
             }
         }
