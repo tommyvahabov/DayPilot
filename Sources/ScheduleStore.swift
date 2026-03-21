@@ -97,20 +97,15 @@ final class ScheduleStore {
         guard let content = try? String(contentsOfFile: memoryPath, encoding: .utf8) else { return }
 
         var lines = content.components(separatedBy: .newlines)
-        var found = false
-        for (i, line) in lines.enumerated() {
-            if line.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("daily_capacity:") {
-                lines[i] = "daily_capacity: \(capacity)"
-                found = true
-                break
-            }
-        }
-        if !found {
-            if let settingsIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## Settings" }) {
-                lines.insert("daily_capacity: \(capacity)", at: settingsIdx + 1)
-            } else {
-                lines.append(contentsOf: ["", "## Settings", "daily_capacity: \(capacity)"])
-            }
+
+        // Remove ALL existing daily_capacity lines
+        lines.removeAll { $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("daily_capacity:") }
+
+        // Insert one fresh line after ## Settings
+        if let settingsIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## Settings" }) {
+            lines.insert("daily_capacity: \(capacity)", at: settingsIdx + 1)
+        } else {
+            lines.append(contentsOf: ["", "## Settings", "daily_capacity: \(capacity)"])
         }
 
         fileWatcher?.isSelfEditing = true
