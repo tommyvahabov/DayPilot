@@ -59,14 +59,14 @@ struct ScheduleContentView: View {
     private var todaySection: some View {
         TaskSectionView(
             title: "Today",
-            subtitle: "\(DurationParser.format(minutes: store.queue.todayEffort)) / \(DurationParser.format(minutes: store.context.dailyCapacityMinutes))",
+            subtitle: "\(store.completedTodayCount)/\(store.totalTodayCount) done",
             items: $store.queue.today,
             section: .today,
             store: store,
             compact: compact,
             showProgress: true,
-            progressCurrent: store.completedTodayMinutes,
-            progressCapacity: store.context.dailyCapacityMinutes
+            progressCurrent: store.completedTodayCount,
+            progressCapacity: store.totalTodayCount
         )
     }
 

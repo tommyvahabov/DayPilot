@@ -8,7 +8,9 @@ final class ScheduleStore {
     private(set) var context = MemoryContext()
     private(set) var rawTodoLines: [String] = []
     private(set) var errorMessage: String?
-    private(set) var completedTodayMinutes: Int = 0
+    private(set) var completedTodayCount: Int = 0
+    private(set) var totalTodayCount: Int = 0
+    private(set) var doneLog: [DoneDay] = []
 
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
@@ -58,7 +60,10 @@ final class ScheduleStore {
             }
 
             queue = Scheduler.schedule(todos: todos, context: context)
-            completedTodayMinutes = computeCompletedToday()
+            let todayStats = computeCompletedToday()
+            completedTodayCount = todayStats.count
+            totalTodayCount = todayStats.count + queue.today.count
+            doneLog = parseDoneLog()
         } catch {
             errorMessage = "Failed to read files: \(error.localizedDescription)"
         }
@@ -112,9 +117,7 @@ final class ScheduleStore {
             lines = content.components(separatedBy: .newlines)
         }
 
-        // Find or create today's section
         if let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) {
-            // Insert after header
             var insertAt = headerIdx + 1
             while insertAt < lines.count {
                 let l = lines[insertAt].trimmingCharacters(in: .whitespaces)
@@ -126,7 +129,6 @@ final class ScheduleStore {
             entry += " | effort: \(DurationParser.format(minutes: item.effortMinutes))"
             lines.insert(entry, at: insertAt)
         } else {
-            // Add new date section at top (after title if exists)
             var insertAt = 0
             if let first = lines.first, first.hasPrefix("# ") {
                 insertAt = 1
@@ -146,30 +148,76 @@ final class ScheduleStore {
 
     // MARK: - Completed Today
 
-    private func computeCompletedToday() -> Int {
-        guard FileManager.default.fileExists(atPath: donePath) else { return 0 }
-        guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return 0 }
+    private func computeCompletedToday() -> (count: Int, minutes: Int) {
+        guard FileManager.default.fileExists(atPath: donePath) else { return (0, 0) }
+        guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return (0, 0) }
 
         let today = Self.dateFormatter.string(from: Date())
         let header = "## \(today)"
         let lines = content.components(separatedBy: .newlines)
 
-        guard let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else { return 0 }
+        guard let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else { return (0, 0) }
 
+        var count = 0
         var total = 0
         var i = headerIdx + 1
         while i < lines.count {
             let line = lines[i].trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("## ") || line.isEmpty { break }
-            // Parse effort from the line
-            if let effortRange = line.range(of: "effort: ") {
-                let rest = String(line[effortRange.upperBound...])
-                let effortStr = rest.split(separator: "|").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? rest
-                total += DurationParser.parseMinutes(effortStr)
+            if line.hasPrefix("- [x] ") {
+                count += 1
+                if let effortRange = line.range(of: "effort: ") {
+                    let rest = String(line[effortRange.upperBound...])
+                    let effortStr = rest.split(separator: "|").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? rest
+                    total += DurationParser.parseMinutes(effortStr)
+                }
             }
             i += 1
         }
-        return total
+        return (count, total)
+    }
+
+    // MARK: - Done Log
+
+    private func parseDoneLog() -> [DoneDay] {
+        guard FileManager.default.fileExists(atPath: donePath) else { return [] }
+        guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return [] }
+
+        let lines = content.components(separatedBy: .newlines)
+        var days: [DoneDay] = []
+        var currentDate: String?
+        var currentEntries: [DoneEntry] = []
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("## ") {
+                if let date = currentDate {
+                    days.append(DoneDay(id: date, date: date, entries: currentEntries))
+                }
+                currentDate = String(trimmed.dropFirst(3))
+                currentEntries = []
+            } else if trimmed.hasPrefix("- [x] "), currentDate != nil {
+                let raw = String(trimmed.dropFirst(6))
+                let parts = raw.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+                let title = parts[0]
+                var project: String?
+                var effort = ""
+                for part in parts.dropFirst() {
+                    let lower = part.lowercased()
+                    if lower.hasPrefix("project:") {
+                        project = part.dropFirst(8).trimmingCharacters(in: .whitespaces)
+                    } else if lower.hasPrefix("effort:") {
+                        effort = part.dropFirst(7).trimmingCharacters(in: .whitespaces)
+                    }
+                }
+                currentEntries.append(DoneEntry(title: title, project: project, effort: effort))
+            }
+        }
+        if let date = currentDate {
+            days.append(DoneDay(id: date, date: date, entries: currentEntries))
+        }
+
+        return days
     }
 
     // MARK: - Private
