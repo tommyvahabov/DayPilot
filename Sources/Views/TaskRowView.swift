@@ -14,43 +14,46 @@ struct TaskRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(item.isCompleted ? .green : .secondary)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if item.isCompleted {
-                            onUncomplete?()
-                        } else {
-                            onComplete()
-                        }
+                Button {
+                    if item.isCompleted {
+                        onUncomplete?()
+                    } else {
+                        onComplete()
                     }
+                } label: {
+                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(item.isCompleted ? .green : .secondary)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.borderless)
 
                 Text("\(index).")
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .frame(width: 24, alignment: .trailing)
 
-                HStack(spacing: 4) {
-                    Text(item.title)
-                        .lineLimit(compact ? 1 : nil)
-                        .fixedSize(horizontal: false, vertical: !compact)
-
-                    if !item.notes.isEmpty {
-                        Image(systemName: "note.text")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
+                Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
                         if isExpanded {
                             noteText = item.notes.joined(separator: "\n")
                         }
                     }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(item.title)
+                            .lineLimit(compact ? 1 : nil)
+                            .fixedSize(horizontal: false, vertical: !compact)
+                            .foregroundStyle(.primary)
+
+                        if !item.notes.isEmpty {
+                            Image(systemName: "note.text")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 }
+                .buttonStyle(.borderless)
 
                 Spacer()
 
@@ -96,7 +99,7 @@ struct TaskRowView: View {
                             onNotesChanged?(notes)
                             withAnimation { isExpanded = false }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderless)
                         .controlSize(.small)
                     }
                 }
