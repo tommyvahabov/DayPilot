@@ -14,17 +14,17 @@ struct TaskRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Button(action: {
-                    if item.isCompleted {
-                        onUncomplete?()
-                    } else {
-                        onComplete()
+                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(item.isCompleted ? .green : .secondary)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if item.isCompleted {
+                            onUncomplete?()
+                        } else {
+                            onComplete()
+                        }
                     }
-                }) {
-                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(item.isCompleted ? .green : .secondary)
-                }
-                .buttonStyle(.plain)
 
                 Text("\(index).")
                     .foregroundStyle(.secondary)
