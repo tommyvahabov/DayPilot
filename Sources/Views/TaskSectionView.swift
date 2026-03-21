@@ -7,16 +7,18 @@ struct TaskSectionView: View {
     let section: ScheduleStore.Section
     let store: ScheduleStore
     var collapsible: Bool = false
+    var compact: Bool = true
 
     @State private var isExpanded: Bool
 
-    init(title: String, subtitle: String?, items: Binding<[TodoItem]>, section: ScheduleStore.Section, store: ScheduleStore, collapsible: Bool = false) {
+    init(title: String, subtitle: String?, items: Binding<[TodoItem]>, section: ScheduleStore.Section, store: ScheduleStore, collapsible: Bool = false, compact: Bool = true) {
         self.title = title
         self.subtitle = subtitle
         self._items = items
         self.section = section
         self.store = store
         self.collapsible = collapsible
+        self.compact = compact
         self._isExpanded = State(initialValue: !collapsible)
     }
 
@@ -26,7 +28,7 @@ struct TaskSectionView: View {
                 header
                 if isExpanded {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        TaskRowView(index: index + 1, item: item) {
+                        TaskRowView(index: index + 1, item: item, compact: compact) {
                             store.completeTask(item)
                         }
                     }

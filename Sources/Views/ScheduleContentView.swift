@@ -62,7 +62,8 @@ struct ScheduleContentView: View {
             subtitle: "\(DurationParser.format(minutes: store.queue.todayEffort)) / \(DurationParser.format(minutes: store.context.dailyCapacityMinutes))",
             items: $store.queue.today,
             section: .today,
-            store: store
+            store: store,
+            compact: compact
         )
     }
 
@@ -72,7 +73,8 @@ struct ScheduleContentView: View {
             subtitle: DurationParser.format(minutes: store.queue.tomorrowEffort),
             items: $store.queue.tomorrow,
             section: .tomorrow,
-            store: store
+            store: store,
+            compact: compact
         )
     }
 
@@ -85,7 +87,8 @@ struct ScheduleContentView: View {
                 items: $store.queue.backlog,
                 section: .backlog,
                 store: store,
-                collapsible: compact
+                collapsible: compact,
+                compact: compact
             )
         }
     }

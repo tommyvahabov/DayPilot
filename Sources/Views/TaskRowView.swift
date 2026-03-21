@@ -3,6 +3,7 @@ import SwiftUI
 struct TaskRowView: View {
     let index: Int
     let item: TodoItem
+    let compact: Bool
     let onComplete: () -> Void
 
     var body: some View {
@@ -19,7 +20,8 @@ struct TaskRowView: View {
                 .frame(width: 24, alignment: .trailing)
 
             Text(item.title)
-                .lineLimit(1)
+                .lineLimit(compact ? 1 : nil)
+                .fixedSize(horizontal: false, vertical: !compact)
 
             Spacer()
 
@@ -31,12 +33,14 @@ struct TaskRowView: View {
                     .background(pillColor(for: project).opacity(0.2))
                     .foregroundStyle(pillColor(for: project))
                     .clipShape(Capsule())
+                    .fixedSize()
             }
 
             Text(DurationParser.format(minutes: item.effortMinutes))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .fixedSize()
         }
         .padding(.vertical, 2)
     }
