@@ -31,14 +31,25 @@ struct TaskRowView: View {
                     .monospacedDigit()
                     .frame(width: 24, alignment: .trailing)
 
-                Text(item.title)
-                    .lineLimit(compact ? 1 : nil)
-                    .fixedSize(horizontal: false, vertical: !compact)
+                HStack(spacing: 4) {
+                    Text(item.title)
+                        .lineLimit(compact ? 1 : nil)
+                        .fixedSize(horizontal: false, vertical: !compact)
 
-                if !item.notes.isEmpty {
-                    Image(systemName: "note.text")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    if !item.notes.isEmpty {
+                        Image(systemName: "note.text")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                        if isExpanded {
+                            noteText = item.notes.joined(separator: "\n")
+                        }
+                    }
                 }
 
                 Spacer()
@@ -59,15 +70,6 @@ struct TaskRowView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .fixedSize()
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
-                    if isExpanded {
-                        noteText = item.notes.joined(separator: "\n")
-                    }
-                }
             }
 
             if isExpanded {
