@@ -8,10 +8,13 @@ struct TaskSectionView: View {
     let store: ScheduleStore
     var collapsible: Bool = false
     var compact: Bool = true
+    var showProgress: Bool = false
+    var progressCurrent: Int = 0
+    var progressCapacity: Int = 0
 
     @State private var isExpanded: Bool
 
-    init(title: String, subtitle: String?, items: Binding<[TodoItem]>, section: ScheduleStore.Section, store: ScheduleStore, collapsible: Bool = false, compact: Bool = true) {
+    init(title: String, subtitle: String?, items: Binding<[TodoItem]>, section: ScheduleStore.Section, store: ScheduleStore, collapsible: Bool = false, compact: Bool = true, showProgress: Bool = false, progressCurrent: Int = 0, progressCapacity: Int = 0) {
         self.title = title
         self.subtitle = subtitle
         self._items = items
@@ -19,6 +22,9 @@ struct TaskSectionView: View {
         self.store = store
         self.collapsible = collapsible
         self.compact = compact
+        self.showProgress = showProgress
+        self.progressCurrent = progressCurrent
+        self.progressCapacity = progressCapacity
         self._isExpanded = State(initialValue: !collapsible)
     }
 
@@ -26,11 +32,19 @@ struct TaskSectionView: View {
         if !items.isEmpty || !collapsible {
             VStack(alignment: .leading, spacing: 4) {
                 header
+
+                if showProgress {
+                    ProgressBarView(current: progressCurrent, capacity: progressCapacity)
+                        .padding(.top, 2)
+                }
+
                 if isExpanded {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        TaskRowView(index: index + 1, item: item, compact: compact) {
+                        TaskRowView(index: index + 1, item: item, compact: compact, onComplete: {
                             store.completeTask(item)
-                        }
+                        }, onNotesChanged: { notes in
+                            store.updateNotes(for: item, notes: notes)
+                        })
                     }
                     .onMove { source, destination in
                         store.moveTask(from: source, to: destination, in: section)

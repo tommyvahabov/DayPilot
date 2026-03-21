@@ -7,6 +7,7 @@ import { join } from "path";
 
 const TODOS_PATH = join(homedir(), "scheduler", "todos.md");
 const MEMORY_PATH = join(homedir(), "scheduler", "memory.md");
+const DONE_PATH = join(homedir(), "scheduler", "done.md");
 
 function ensureDir() {
   const dir = join(homedir(), "scheduler");
@@ -23,13 +24,39 @@ function writeLines(lines) {
   writeFileSync(TODOS_PATH, lines.join("\n"), "utf-8");
 }
 
+function isNoteLine(line) {
+  return line && (line.startsWith("  ") || line.startsWith("\t")) && !line.trim().startsWith("- [ ] ") && !line.trim().startsWith("- [x] ");
+}
+
+// Collect note lines following a task at index i
+function collectNotes(lines, taskIdx) {
+  const notes = [];
+  let j = taskIdx + 1;
+  while (j < lines.length && isNoteLine(lines[j])) {
+    notes.push(lines[j].trim());
+    j++;
+  }
+  return notes;
+}
+
+// Count note lines following a task at index i
+function countNoteLines(lines, taskIdx) {
+  let count = 0;
+  let j = taskIdx + 1;
+  while (j < lines.length && isNoteLine(lines[j])) {
+    count++;
+    j++;
+  }
+  return count;
+}
+
 const server = new McpServer({
   name: "daypilot",
-  version: "1.0.0",
+  version: "1.1.0",
 });
 
-// List all tasks
-server.tool("list_tasks", "List all tasks from ~/scheduler/todos.md", {}, () => {
+// List all tasks (with notes)
+server.tool("list_tasks", "List all tasks from ~/scheduler/todos.md (includes notes)", {}, () => {
   const lines = readLines();
   const tasks = [];
   for (let i = 0; i < lines.length; i++) {
@@ -37,40 +64,78 @@ server.tool("list_tasks", "List all tasks from ~/scheduler/todos.md", {}, () => 
     const openMatch = line.match(/^- \[ \] (.+)/);
     const doneMatch = line.match(/^- \[x\] (.+)/);
     if (openMatch) {
-      tasks.push({ line: i, status: "open", raw: openMatch[1] });
+      const notes = collectNotes(lines, i);
+      tasks.push({ line: i, status: "open", raw: openMatch[1], notes });
+      i += notes.length;
     } else if (doneMatch) {
-      tasks.push({ line: i, status: "done", raw: doneMatch[1] });
+      const notes = collectNotes(lines, i);
+      tasks.push({ line: i, status: "done", raw: doneMatch[1], notes });
+      i += notes.length;
     }
   }
   return { content: [{ type: "text", text: JSON.stringify(tasks, null, 2) }] };
 });
 
-// Add a task
+// Add a task (with optional notes)
 server.tool(
   "add_task",
-  "Add a new task to ~/scheduler/todos.md. Fields: title (required), project, effort (e.g. '30m', '1h'), deadline (YYYY-MM-DD)",
+  "Add a new task to ~/scheduler/todos.md. Fields: title (required), project, effort (e.g. '30m', '1h'), deadline (YYYY-MM-DD), notes (array of strings)",
   {
     title: z.string().describe("Task title"),
     project: z.string().optional().describe("Project name"),
     effort: z.string().optional().describe("Effort estimate, e.g. '30m', '1h', '1h30m'"),
     deadline: z.string().optional().describe("Deadline in YYYY-MM-DD format"),
+    notes: z.array(z.string()).optional().describe("Task notes, each string is a line"),
   },
-  ({ title, project, effort, deadline }) => {
+  ({ title, project, effort, deadline, notes }) => {
     const lines = readLines();
     let task = `- [ ] ${title}`;
     if (project) task += ` | project: ${project}`;
     if (effort) task += ` | effort: ${effort}`;
     if (deadline) task += ` | deadline: ${deadline}`;
     lines.push(task);
+    if (notes && notes.length > 0) {
+      for (const note of notes) {
+        lines.push(`  ${note}`);
+      }
+    }
     writeLines(lines);
-    return { content: [{ type: "text", text: `Added: ${task}` }] };
+    return { content: [{ type: "text", text: `Added: ${task}${notes ? ` (${notes.length} notes)` : ""}` }] };
+  }
+);
+
+// Add/update notes on a task
+server.tool(
+  "update_task_notes",
+  "Add or replace notes on a task (by title partial match)",
+  {
+    title: z.string().describe("Task title or partial match"),
+    notes: z.array(z.string()).describe("New notes (replaces existing)"),
+  },
+  ({ title, notes }) => {
+    const lines = readLines();
+    const lower = title.toLowerCase();
+    for (let i = 0; i < lines.length; i++) {
+      if ((lines[i].includes("- [ ] ") || lines[i].includes("- [x] ")) && lines[i].toLowerCase().includes(lower)) {
+        // Remove old notes
+        const oldCount = countNoteLines(lines, i);
+        lines.splice(i + 1, oldCount);
+        // Insert new notes
+        for (let n = notes.length - 1; n >= 0; n--) {
+          lines.splice(i + 1, 0, `  ${notes[n]}`);
+        }
+        writeLines(lines);
+        return { content: [{ type: "text", text: `Updated notes on: ${lines[i].trim()} (${notes.length} notes)` }] };
+      }
+    }
+    return { content: [{ type: "text", text: `No task matching "${title}" found` }] };
   }
 );
 
 // Complete a task
 server.tool(
   "complete_task",
-  "Mark a task as done by its title (partial match)",
+  "Mark a task as done by its title (partial match). Also logs to ~/scheduler/done.md",
   {
     title: z.string().describe("Task title or partial match"),
   },
@@ -79,8 +144,10 @@ server.tool(
     const lower = title.toLowerCase();
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].includes("- [ ] ") && lines[i].toLowerCase().includes(lower)) {
+        const taskLine = lines[i];
         lines[i] = lines[i].replace("- [ ] ", "- [x] ");
         writeLines(lines);
+        logDone(taskLine.trim().replace("- [ ] ", ""));
         return { content: [{ type: "text", text: `Completed: ${lines[i].trim()}` }] };
       }
     }
@@ -88,10 +155,10 @@ server.tool(
   }
 );
 
-// Remove a task
+// Remove a task (and its notes)
 server.tool(
   "remove_task",
-  "Remove a task entirely by its title (partial match)",
+  "Remove a task and its notes entirely by title (partial match)",
   {
     title: z.string().describe("Task title or partial match"),
   },
@@ -100,9 +167,10 @@ server.tool(
     const lower = title.toLowerCase();
     for (let i = 0; i < lines.length; i++) {
       if ((lines[i].includes("- [ ] ") || lines[i].includes("- [x] ")) && lines[i].toLowerCase().includes(lower)) {
-        const removed = lines.splice(i, 1)[0];
+        const noteCount = countNoteLines(lines, i);
+        const removed = lines.splice(i, 1 + noteCount);
         writeLines(lines);
-        return { content: [{ type: "text", text: `Removed: ${removed.trim()}` }] };
+        return { content: [{ type: "text", text: `Removed: ${removed[0].trim()} (+ ${noteCount} notes)` }] };
       }
     }
     return { content: [{ type: "text", text: `No task matching "${title}" found` }] };
@@ -115,6 +183,15 @@ server.tool("read_memory", "Read ~/scheduler/memory.md (projects, priorities, ca
     return { content: [{ type: "text", text: "No memory.md found" }] };
   }
   const content = readFileSync(MEMORY_PATH, "utf-8");
+  return { content: [{ type: "text", text: content }] };
+});
+
+// Read done.md (daily completion log)
+server.tool("read_done_log", "Read ~/scheduler/done.md — daily log of completed tasks", {}, () => {
+  if (!existsSync(DONE_PATH)) {
+    return { content: [{ type: "text", text: "No done.md found — no tasks completed yet" }] };
+  }
+  const content = readFileSync(DONE_PATH, "utf-8");
   return { content: [{ type: "text", text: content }] };
 });
 
@@ -191,6 +268,38 @@ server.tool(
     return { content: [{ type: "text", text: `Project "${name}" set: priority ${priority}${deadline ? `, deadline ${deadline}` : ""}` }] };
   }
 );
+
+// Helper: log completed task to done.md
+function logDone(rawTask) {
+  ensureDir();
+  const today = new Date().toISOString().split("T")[0];
+  const header = `## ${today}`;
+
+  let lines = [];
+  if (existsSync(DONE_PATH)) {
+    lines = readFileSync(DONE_PATH, "utf-8").split("\n");
+  }
+
+  const headerIdx = lines.findIndex((l) => l.trim() === header);
+  const entry = `- [x] ${rawTask}`;
+
+  if (headerIdx !== -1) {
+    let insertAt = headerIdx + 1;
+    while (insertAt < lines.length && lines[insertAt].trim() && !lines[insertAt].trim().startsWith("## ")) {
+      insertAt++;
+    }
+    lines.splice(insertAt, 0, entry);
+  } else {
+    let insertAt = 0;
+    if (lines.length > 0 && lines[0].startsWith("# ")) {
+      insertAt = 1;
+      if (insertAt < lines.length && lines[insertAt] === "") insertAt = 2;
+    }
+    lines.splice(insertAt, 0, header, entry, "");
+  }
+
+  writeFileSync(DONE_PATH, lines.join("\n"), "utf-8");
+}
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

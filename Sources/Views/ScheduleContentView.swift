@@ -63,7 +63,10 @@ struct ScheduleContentView: View {
             items: $store.queue.today,
             section: .today,
             store: store,
-            compact: compact
+            compact: compact,
+            showProgress: true,
+            progressCurrent: store.queue.todayEffort,
+            progressCapacity: store.context.dailyCapacityMinutes
         )
     }
 

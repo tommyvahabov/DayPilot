@@ -7,7 +7,8 @@ struct TodoItem: Identifiable, Equatable {
     var effortMinutes: Int
     var deadline: Date?
     var isCompleted: Bool
-    var lineIndex: Int  // position in the original file for write-back
+    var lineIndex: Int
+    var notes: [String]
 
     init(
         id: UUID = UUID(),
@@ -16,7 +17,8 @@ struct TodoItem: Identifiable, Equatable {
         effortMinutes: Int = 15,
         deadline: Date? = nil,
         isCompleted: Bool = false,
-        lineIndex: Int = -1
+        lineIndex: Int = -1,
+        notes: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -25,5 +27,6 @@ struct TodoItem: Identifiable, Equatable {
         self.deadline = deadline
         self.isCompleted = isCompleted
         self.lineIndex = lineIndex
+        self.notes = notes
     }
 }
