@@ -94,25 +94,28 @@ final class ScheduleStore {
     /// Uncomplete a task by title match (used by Flight Log where we don't have lineIndex)
     func setDailyCapacity(_ capacity: String) {
         guard FileManager.default.fileExists(atPath: memoryPath) else { return }
-        guard var content = try? String(contentsOfFile: memoryPath, encoding: .utf8) else { return }
+        guard let content = try? String(contentsOfFile: memoryPath, encoding: .utf8) else { return }
 
-        if content.range(of: "^daily_capacity:.*", options: .regularExpression, range: content.startIndex..<content.endIndex) != nil {
-            content = content.replacingOccurrences(
-                of: "daily_capacity:.*",
-                with: "daily_capacity: \(capacity)",
-                options: .regularExpression
-            )
-        } else if content.contains("## Settings") {
-            content = content.replacingOccurrences(
-                of: "## Settings",
-                with: "## Settings\ndaily_capacity: \(capacity)"
-            )
-        } else {
-            content += "\n## Settings\ndaily_capacity: \(capacity)\n"
+        var lines = content.components(separatedBy: .newlines)
+        var found = false
+        for (i, line) in lines.enumerated() {
+            if line.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("daily_capacity:") {
+                lines[i] = "daily_capacity: \(capacity)"
+                found = true
+                break
+            }
+        }
+        if !found {
+            if let settingsIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## Settings" }) {
+                lines.insert("daily_capacity: \(capacity)", at: settingsIdx + 1)
+            } else {
+                lines.append(contentsOf: ["", "## Settings", "daily_capacity: \(capacity)"])
+            }
         }
 
         fileWatcher?.isSelfEditing = true
-        try? content.write(toFile: memoryPath, atomically: true, encoding: .utf8)
+        let result = lines.joined(separator: "\n")
+        try? result.write(toFile: memoryPath, atomically: true, encoding: .utf8)
         recompute()
     }
 
