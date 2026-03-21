@@ -10,7 +10,7 @@ struct MainWindowView: View {
             Divider()
 
             HStack(spacing: 12) {
-                AddTaskView(store: store)
+                AddTaskView(store: store, compact: false)
 
                 Button(action: { store.recompute() }) {
                     Label("Reschedule", systemImage: "arrow.clockwise")
