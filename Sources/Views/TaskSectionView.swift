@@ -13,6 +13,7 @@ struct TaskSectionView: View {
     var progressCapacity: Int = 0
 
     @State private var isExpanded: Bool
+    @State private var draggingItem: TodoItem?
 
     init(title: String, subtitle: String?, items: Binding<[TodoItem]>, section: ScheduleStore.Section, store: ScheduleStore, collapsible: Bool = false, compact: Bool = true, showProgress: Bool = false, progressCurrent: Int = 0, progressCapacity: Int = 0) {
         self.title = title
@@ -47,9 +48,25 @@ struct TaskSectionView: View {
                         }, onNotesChanged: { notes in
                             store.updateNotes(for: item, notes: notes)
                         })
-                    }
-                    .onMove { source, destination in
-                        store.moveTask(from: source, to: destination, in: section)
+                        .draggable(item.id.uuidString) {
+                            Text(item.title)
+                                .padding(8)
+                                .background(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .dropDestination(for: String.self) { droppedIDs, _ in
+                            guard let droppedID = droppedIDs.first,
+                                  let fromIndex = items.firstIndex(where: { $0.id.uuidString == droppedID }) else {
+                                return false
+                            }
+                            let toIndex = index
+                            if fromIndex != toIndex {
+                                withAnimation {
+                                    items.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+                                }
+                            }
+                            return true
+                        }
                     }
                 }
             }
@@ -67,7 +84,7 @@ struct TaskSectionView: View {
                             .font(.headline)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
             } else {
                 Text(title)
                     .font(.headline)
