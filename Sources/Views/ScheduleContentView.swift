@@ -27,6 +27,7 @@ struct ScheduleContentView: View {
     private var compactLayout: some View {
         List {
             todaySection
+            completedSection
             tomorrowSection
             backlogSection
         }
@@ -37,6 +38,7 @@ struct ScheduleContentView: View {
         HStack(alignment: .top, spacing: 0) {
             List {
                 todaySection
+                completedSection
             }
             .listStyle(.plain)
 
@@ -68,6 +70,22 @@ struct ScheduleContentView: View {
             progressCurrent: store.completedTodayCount,
             progressCapacity: store.totalTodayCount
         )
+    }
+
+    @ViewBuilder
+    private var completedSection: some View {
+        if !store.queue.completedToday.isEmpty {
+            TaskSectionView(
+                title: "Done",
+                subtitle: "\(store.queue.completedToday.count) tasks",
+                items: $store.queue.completedToday,
+                section: .today,
+                store: store,
+                collapsible: true,
+                compact: compact
+            )
+            .opacity(0.6)
+        }
     }
 
     private var tomorrowSection: some View {

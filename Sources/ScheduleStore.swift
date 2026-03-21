@@ -51,6 +51,8 @@ final class ScheduleStore {
             let todoContent = try String(contentsOfFile: todosPath, encoding: .utf8)
             rawTodoLines = todoContent.components(separatedBy: .newlines)
             let todos = TodoParser.parse(lines: rawTodoLines)
+            let allTodos = TodoParser.parseAll(lines: rawTodoLines)
+            let completed = allTodos.filter { $0.isCompleted }
 
             if FileManager.default.fileExists(atPath: memoryPath) {
                 let memContent = try String(contentsOfFile: memoryPath, encoding: .utf8)
@@ -60,6 +62,7 @@ final class ScheduleStore {
             }
 
             queue = Scheduler.schedule(todos: todos, context: context)
+            queue.completedToday = completed
             let todayStats = computeCompletedToday()
             completedTodayCount = todayStats.count
             totalTodayCount = todayStats.count + queue.today.count
