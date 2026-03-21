@@ -17,20 +17,24 @@ Edit the files in any editor — the app watches for changes and updates live.
 
 ## Install
 
+### Homebrew (recommended)
+
+```bash
+brew tap tommyvahabov/tap
+brew install --cask daypilot
+```
+
+### Manual
+
 ```bash
 git clone https://github.com/tommyvahabov/DayPilot.git
 cd DayPilot
 swift build -c release
-```
-
-### Create the app bundle
-
-```bash
 bash bundle.sh
 open ~/Applications/DayPilot.app
 ```
 
-### Add to Login Items (optional)
+### Auto-launch on login (optional)
 
 ```bash
 osascript -e 'tell application "System Events" to make login item at end with properties {path:"'$HOME'/Applications/DayPilot.app", hidden:true}'
