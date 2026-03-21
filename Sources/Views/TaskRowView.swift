@@ -5,6 +5,7 @@ struct TaskRowView: View {
     let item: TodoItem
     let compact: Bool
     let onComplete: () -> Void
+    var onUncomplete: (() -> Void)?
     var onNotesChanged: (([String]) -> Void)?
 
     @State private var isExpanded = false
@@ -13,7 +14,13 @@ struct TaskRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Button(action: onComplete) {
+                Button(action: {
+                    if item.isCompleted {
+                        onUncomplete?()
+                    } else {
+                        onComplete()
+                    }
+                }) {
                     Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(item.isCompleted ? .green : .secondary)
                 }

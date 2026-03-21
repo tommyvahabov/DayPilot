@@ -77,6 +77,13 @@ final class ScheduleStore {
         recompute()
     }
 
+    func uncompleteTask(_ item: TodoItem) {
+        fileWatcher?.isSelfEditing = true
+        TodoParser.markIncomplete(lines: &rawTodoLines, at: item.lineIndex)
+        writeBack()
+        recompute()
+    }
+
     func addTask(raw: String, notes: [String] = []) {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }

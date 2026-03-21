@@ -42,6 +42,8 @@ struct TaskSectionView: View {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         TaskRowView(index: index + 1, item: item, compact: compact, onComplete: {
                             store.completeTask(item)
+                        }, onUncomplete: {
+                            store.uncompleteTask(item)
                         }, onNotesChanged: { notes in
                             store.updateNotes(for: item, notes: notes)
                         })

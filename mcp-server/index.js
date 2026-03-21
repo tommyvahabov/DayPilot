@@ -155,6 +155,27 @@ server.tool(
   }
 );
 
+// Uncomplete a task
+server.tool(
+  "uncomplete_task",
+  "Mark a completed task as open again by its title (partial match)",
+  {
+    title: z.string().describe("Task title or partial match"),
+  },
+  ({ title }) => {
+    const lines = readLines();
+    const lower = title.toLowerCase();
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes("- [x] ") && lines[i].toLowerCase().includes(lower)) {
+        lines[i] = lines[i].replace("- [x] ", "- [ ] ");
+        writeLines(lines);
+        return { content: [{ type: "text", text: `Reopened: ${lines[i].trim()}` }] };
+      }
+    }
+    return { content: [{ type: "text", text: `No completed task matching "${title}" found` }] };
+  }
+);
+
 // Remove a task (and its notes)
 server.tool(
   "remove_task",

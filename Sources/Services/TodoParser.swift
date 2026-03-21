@@ -103,6 +103,11 @@ enum TodoParser {
         lines[lineIndex] = lines[lineIndex].replacingOccurrences(of: "- [ ] ", with: "- [x] ")
     }
 
+    static func markIncomplete(lines: inout [String], at lineIndex: Int) {
+        guard lineIndex >= 0, lineIndex < lines.count else { return }
+        lines[lineIndex] = lines[lineIndex].replacingOccurrences(of: "- [x] ", with: "- [ ] ")
+    }
+
     static func append(lines: inout [String], raw: String, notes: [String] = []) {
         lines.append("- [ ] \(raw)")
         for note in notes {
