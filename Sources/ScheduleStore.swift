@@ -84,6 +84,7 @@ final class ScheduleStore {
         fileWatcher?.isSelfEditing = true
         TodoParser.markIncomplete(lines: &rawTodoLines, at: item.lineIndex)
         writeBack()
+        removeFromDoneLog(item)
         recompute()
     }
 
@@ -154,6 +155,35 @@ final class ScheduleStore {
 
         let content = lines.joined(separator: "\n")
         try? content.write(toFile: donePath, atomically: true, encoding: .utf8)
+    }
+
+    private func removeFromDoneLog(_ item: TodoItem) {
+        guard FileManager.default.fileExists(atPath: donePath) else { return }
+        guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return }
+
+        let today = Self.dateFormatter.string(from: Date())
+        let header = "## \(today)"
+        var lines = content.components(separatedBy: .newlines)
+
+        guard let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else { return }
+
+        // Find and remove the LAST matching entry for this task under today's header
+        var lastMatch: Int?
+        var i = headerIdx + 1
+        while i < lines.count {
+            let line = lines[i].trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("## ") || line.isEmpty { break }
+            if line.contains(item.title) {
+                lastMatch = i
+            }
+            i += 1
+        }
+
+        if let idx = lastMatch {
+            lines.remove(at: idx)
+            let result = lines.joined(separator: "\n")
+            try? result.write(toFile: donePath, atomically: true, encoding: .utf8)
+        }
     }
 
     // MARK: - Completed Today
