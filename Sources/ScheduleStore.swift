@@ -15,11 +15,15 @@ final class ScheduleStore {
     var todosPath: String { "\(schedulerDir)/todos.md" }
     var memoryPath: String { "\(schedulerDir)/memory.md" }
 
+    private var started = false
+
     init() {
         self.schedulerDir = NSHomeDirectory() + "/scheduler"
     }
 
     func start() {
+        guard !started else { return }
+        started = true
         recompute()
         setupFileWatcher()
     }
