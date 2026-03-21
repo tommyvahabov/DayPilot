@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "daypilot": {
+      "command": "node",
+      "args": ["/Users/rahmonberdivahabov/Projects/DayPilot/mcp-server/index.js"]
+    }
+  }
+}

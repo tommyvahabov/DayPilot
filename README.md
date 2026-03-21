@@ -89,7 +89,7 @@ cd mcp-server
 npm install
 ```
 
-Add to your Claude Code config (`~/.claude/settings.local.json`):
+Create `.mcp.json` in your project root (any project where you want Claude to manage tasks):
 
 ```json
 {
@@ -101,6 +101,8 @@ Add to your Claude Code config (`~/.claude/settings.local.json`):
   }
 }
 ```
+
+Then restart Claude Code. The tools will be available in that project.
 
 Available tools: `list_tasks`, `add_task`, `complete_task`, `remove_task`, `read_memory`, `update_memory`, `set_capacity`, `set_project`
 
