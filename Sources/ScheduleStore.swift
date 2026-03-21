@@ -8,6 +8,7 @@ final class ScheduleStore {
     private(set) var context = MemoryContext()
     private(set) var rawTodoLines: [String] = []
     private(set) var errorMessage: String?
+    private(set) var completedTodayMinutes: Int = 0
 
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
@@ -57,6 +58,7 @@ final class ScheduleStore {
             }
 
             queue = Scheduler.schedule(todos: todos, context: context)
+            completedTodayMinutes = computeCompletedToday()
         } catch {
             errorMessage = "Failed to read files: \(error.localizedDescription)"
         }
@@ -140,6 +142,34 @@ final class ScheduleStore {
 
         let content = lines.joined(separator: "\n")
         try? content.write(toFile: donePath, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Completed Today
+
+    private func computeCompletedToday() -> Int {
+        guard FileManager.default.fileExists(atPath: donePath) else { return 0 }
+        guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return 0 }
+
+        let today = Self.dateFormatter.string(from: Date())
+        let header = "## \(today)"
+        let lines = content.components(separatedBy: .newlines)
+
+        guard let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else { return 0 }
+
+        var total = 0
+        var i = headerIdx + 1
+        while i < lines.count {
+            let line = lines[i].trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("## ") || line.isEmpty { break }
+            // Parse effort from the line
+            if let effortRange = line.range(of: "effort: ") {
+                let rest = String(line[effortRange.upperBound...])
+                let effortStr = rest.split(separator: "|").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? rest
+                total += DurationParser.parseMinutes(effortStr)
+            }
+            i += 1
+        }
+        return total
     }
 
     // MARK: - Private

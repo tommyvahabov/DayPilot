@@ -65,7 +65,7 @@ struct ScheduleContentView: View {
             store: store,
             compact: compact,
             showProgress: true,
-            progressCurrent: store.queue.todayEffort,
+            progressCurrent: store.completedTodayMinutes,
             progressCapacity: store.context.dailyCapacityMinutes
         )
     }
