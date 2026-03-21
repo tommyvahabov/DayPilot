@@ -20,8 +20,14 @@ struct FlightLogView: View {
                     Section {
                         ForEach(day.entries) { entry in
                             HStack(spacing: 8) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
+                                Button {
+                                    store.uncompleteByTitle(entry.title)
+                                } label: {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Reopen this task")
 
                                 Text(entry.title)
 

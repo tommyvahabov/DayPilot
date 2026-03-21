@@ -62,7 +62,10 @@ final class ScheduleStore {
             }
 
             queue = Scheduler.schedule(todos: todos, context: context)
-            queue.completedToday = completed
+
+            // Filter completed to only today's by matching titles in done.md
+            let todayTitles = Set(todayDoneTitles())
+            queue.completedToday = completed.filter { todayTitles.contains($0.title) }
             let todayStats = computeCompletedToday()
             completedTodayCount = todayStats.count
             totalTodayCount = todayStats.count + queue.today.count
@@ -86,6 +89,22 @@ final class ScheduleStore {
         writeBack()
         removeFromDoneLog(item)
         recompute()
+    }
+
+    /// Uncomplete a task by title match (used by Flight Log where we don't have lineIndex)
+    func uncompleteByTitle(_ title: String) {
+        fileWatcher?.isSelfEditing = true
+        for (i, line) in rawTodoLines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("- [x] ") && trimmed.contains(title) {
+                TodoParser.markIncomplete(lines: &rawTodoLines, at: i)
+                writeBack()
+                let item = TodoItem(title: title, lineIndex: i)
+                removeFromDoneLog(item)
+                recompute()
+                return
+            }
+        }
     }
 
     func addTask(raw: String, notes: [String] = []) {
@@ -184,6 +203,31 @@ final class ScheduleStore {
             let result = lines.joined(separator: "\n")
             try? result.write(toFile: donePath, atomically: true, encoding: .utf8)
         }
+    }
+
+    private func todayDoneTitles() -> [String] {
+        guard FileManager.default.fileExists(atPath: donePath) else { return [] }
+        guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return [] }
+
+        let today = Self.dateFormatter.string(from: Date())
+        let header = "## \(today)"
+        let lines = content.components(separatedBy: .newlines)
+
+        guard let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else { return [] }
+
+        var titles: [String] = []
+        var i = headerIdx + 1
+        while i < lines.count {
+            let line = lines[i].trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("## ") || line.isEmpty { break }
+            if line.hasPrefix("- [x] ") {
+                let raw = String(line.dropFirst(6))
+                let title = raw.split(separator: "|").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? raw
+                titles.append(title)
+            }
+            i += 1
+        }
+        return titles
     }
 
     // MARK: - Completed Today
