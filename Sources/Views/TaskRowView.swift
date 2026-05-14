@@ -10,17 +10,27 @@ struct TaskRowView: View {
 
     @State private var isExpanded = false
     @State private var noteText = ""
-    @State private var liftoff = false
+    @State private var planeVisible = false
+    @State private var flying = false
+    @State private var titleHidden = false
 
     private func triggerComplete() {
-        guard !liftoff else { return }
-        withAnimation(.easeIn(duration: 0.55)) {
-            liftoff = true
+        guard !flying else { return }
+        withAnimation(.easeOut(duration: 0.18)) {
+            planeVisible = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+        withAnimation(.easeIn(duration: 1.4)) {
+            flying = true
+        }
+        withAnimation(.easeIn(duration: 0.8).delay(0.5)) {
+            titleHidden = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.45) {
             onComplete()
         }
     }
+
+    private var liftoff: Bool { flying }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -45,48 +55,49 @@ struct TaskRowView: View {
                     .monospacedDigit()
                     .frame(width: 14, alignment: .trailing)
 
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                        if isExpanded {
-                            noteText = item.notes.joined(separator: "\n")
-                        }
-                    }
-                } label: {
-                    HStack(alignment: .top, spacing: 4) {
-                        Text(item.title)
-                            .font(.system(size: 13))
-                            .lineLimit(compact ? 1 : nil)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: !compact)
-                            .foregroundStyle(item.isCompleted ? .secondary : .primary)
-                            .strikethrough(item.isCompleted, color: .secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .overlay(alignment: .leading) {
-                                Image(systemName: "airplane")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(Color.accentColor)
-                                    .rotationEffect(.degrees(-10))
-                                    .offset(x: liftoff ? -2 : -28, y: liftoff ? -2 : 0)
-                                    .opacity(liftoff ? 1 : 0)
-                                    .allowsHitTesting(false)
-                            }
-                            .offset(x: liftoff ? 600 : 0)
-                            .opacity(liftoff ? 0 : 1)
+                ZStack(alignment: .leading) {
+                    Image(systemName: "airplane")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color.accentColor)
+                        .rotationEffect(.degrees(-14))
+                        .opacity(planeVisible ? 1 : 0)
+                        .offset(x: flying ? 700 : -40, y: flying ? -14 : 0)
+                        .allowsHitTesting(false)
 
-                        if !item.notes.isEmpty {
-                            Image(systemName: "note.text")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, 3)
-                                .opacity(liftoff ? 0 : 1)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isExpanded.toggle()
+                            if isExpanded {
+                                noteText = item.notes.joined(separator: "\n")
+                            }
                         }
+                    } label: {
+                        HStack(alignment: .top, spacing: 4) {
+                            Text(item.title)
+                                .font(.system(size: 13))
+                                .lineLimit(compact ? 1 : nil)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: !compact)
+                                .foregroundStyle(item.isCompleted ? .secondary : .primary)
+                                .strikethrough(item.isCompleted, color: .secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if !item.notes.isEmpty {
+                                Image(systemName: "note.text")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.top, 3)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.borderless)
+                    .disabled(flying)
+                    .opacity(titleHidden ? 0 : 1)
+                    .offset(x: flying ? 760 : 0)
                 }
-                .buttonStyle(.borderless)
-                .disabled(liftoff)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let project = item.project {
                     Text(project)

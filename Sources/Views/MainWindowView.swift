@@ -89,8 +89,7 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var brandIcon: some View {
-        if let url = Bundle.module.url(forResource: "SidebarIcon", withExtension: "png"),
-           let nsImage = NSImage(contentsOf: url) {
+        if let nsImage = AppResources.image(named: "SidebarIcon") {
             Image(nsImage: nsImage)
                 .resizable()
                 .renderingMode(.original)

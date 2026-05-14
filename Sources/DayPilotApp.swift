@@ -32,6 +32,13 @@ struct WindowOpenerBinder: ViewModifier {
     }
 }
 
+enum AppResources {
+    static func image(named name: String, ext: String = "png") -> NSImage? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: ext) else { return nil }
+        return NSImage(contentsOf: url)
+    }
+}
+
 @main
 struct DayPilotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -39,7 +46,7 @@ struct DayPilotApp: App {
     @State private var updateChecker = UpdateChecker()
 
     static let menubarImage: NSImage? = {
-        guard let url = Bundle.module.url(forResource: "MenubarIcon@2x", withExtension: "png"),
+        guard let url = Bundle.main.url(forResource: "MenubarIcon@2x", withExtension: "png"),
               let img = NSImage(contentsOf: url) else { return nil }
         img.size = NSSize(width: 17, height: 17)
         img.isTemplate = false
