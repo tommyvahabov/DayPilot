@@ -17,6 +17,16 @@ cp ".build/arm64-apple-macosx/release/$APP_NAME" "$MACOS/$APP_NAME"
 # Copy app icon
 cp "Resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
 
+# Copy SPM module resource bundle (contains MenubarIcon.png, SidebarIcon.png, etc.)
+# Without this, Bundle.module crashes at runtime on machines other than the build host.
+BUILD_DIR=".build/arm64-apple-macosx/release"
+MODULE_BUNDLE="${APP_NAME}_${APP_NAME}.bundle"
+if [ -d "$BUILD_DIR/$MODULE_BUNDLE" ]; then
+    cp -R "$BUILD_DIR/$MODULE_BUNDLE" "$RESOURCES/$MODULE_BUNDLE"
+else
+    echo "⚠ Module bundle not found at $BUILD_DIR/$MODULE_BUNDLE — runtime crash likely"
+fi
+
 # Info.plist
 cat > "$CONTENTS/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
