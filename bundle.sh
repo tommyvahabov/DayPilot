@@ -34,9 +34,9 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
     <key>CFBundleIdentifier</key>
     <string>com.pilotai.daypilot</string>
     <key>CFBundleVersion</key>
-    <string>1.10.0</string>
+    <string>1.10.1</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.10.0</string>
+    <string>1.10.1</string>
     <key>CFBundleExecutable</key>
     <string>DayPilot</string>
     <key>CFBundleIconFile</key>
