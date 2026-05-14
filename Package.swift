@@ -8,6 +8,11 @@ let package = Package(
         .executableTarget(
             name: "DayPilot",
             path: "Sources",
+            resources: [
+                .copy("MenubarIcon.png"),
+                .copy("MenubarIcon@2x.png"),
+                .copy("SidebarIcon.png"),
+            ],
             swiftSettings: [.enableUpcomingFeature("BareSlashRegexLiterals")]
         ),
         .testTarget(

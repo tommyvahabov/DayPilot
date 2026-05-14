@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum SidebarTab: String, CaseIterable {
     case runway = "Runway"
@@ -24,6 +25,7 @@ enum SidebarTab: String, CaseIterable {
 
 struct MainWindowView: View {
     @Bindable var store: ScheduleStore
+    @Bindable var updateChecker: UpdateChecker
     @State private var selectedTab: SidebarTab = .runway
 
     var body: some View {
@@ -69,19 +71,8 @@ struct MainWindowView: View {
 
     private var brand: some View {
         HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: [.accentColor, .accentColor.opacity(0.6)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(width: 30, height: 30)
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .rotationEffect(.degrees(-25))
-            }
+            brandIcon
+                .frame(width: 30, height: 30)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("DayPilot")
@@ -93,8 +84,41 @@ struct MainWindowView: View {
         }
     }
 
+    @ViewBuilder
+    private var brandIcon: some View {
+        if let url = Bundle.module.url(forResource: "SidebarIcon", withExtension: "png"),
+           let nsImage = NSImage(contentsOf: url) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .renderingMode(.original)
+                .interpolation(.high)
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor)
+        }
+    }
+
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
+            if updateChecker.isUpdateAvailable, let url = updateChecker.releaseURL, let latest = updateChecker.latestVersion {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 10))
+                        Text("Update to \(latest)")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(Color.accentColor)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
             HStack(spacing: 6) {
                 Circle()
                     .fill(Color.green)
@@ -103,7 +127,7 @@ struct MainWindowView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-            Text("~/scheduler/")
+            Text("~/scheduler/  •  v\(updateChecker.currentVersion)")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(.tertiary)
         }

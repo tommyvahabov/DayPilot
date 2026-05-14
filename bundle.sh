@@ -14,6 +14,9 @@ mkdir -p "$MACOS" "$RESOURCES"
 # Copy binary
 cp ".build/arm64-apple-macosx/release/$APP_NAME" "$MACOS/$APP_NAME"
 
+# Copy app icon
+cp "Resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
+
 # Info.plist
 cat > "$CONTENTS/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,8 +41,6 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
 </dict>

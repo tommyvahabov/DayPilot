@@ -34,8 +34,48 @@ final class ScheduleStore {
     func start() {
         guard !started else { return }
         started = true
+        bootstrapSchedulerDirectory()
         recompute()
         setupFileWatcher()
+    }
+
+    private func bootstrapSchedulerDirectory() {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: schedulerDir) {
+            try? fm.createDirectory(atPath: schedulerDir, withIntermediateDirectories: true)
+        }
+        if !fm.fileExists(atPath: todosPath) {
+            let starter = """
+            # Todos
+
+            - [ ] Welcome to DayPilot — try editing this list | project: DayPilot | effort: 5m
+            - [ ] Open ~/scheduler/memory.md and set your projects + capacity | project: DayPilot | effort: 10m
+
+            """
+            try? starter.write(toFile: todosPath, atomically: true, encoding: .utf8)
+        }
+        if !fm.fileExists(atPath: memoryPath) {
+            let starter = """
+            # Memory
+
+            ## Projects
+            - DayPilot | priority: 1
+
+            ## Settings
+            daily_capacity: 4h
+
+            ## Energy pattern
+            Best focus 9am-12pm, lighter work afternoons, admin in the evening.
+
+            ## Current focus
+            Getting set up with DayPilot.
+
+            """
+            try? starter.write(toFile: memoryPath, atomically: true, encoding: .utf8)
+        }
+        if !fm.fileExists(atPath: donePath) {
+            try? "".write(toFile: donePath, atomically: true, encoding: .utf8)
+        }
     }
 
     func recompute() {
