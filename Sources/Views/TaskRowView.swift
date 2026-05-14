@@ -10,6 +10,17 @@ struct TaskRowView: View {
 
     @State private var isExpanded = false
     @State private var noteText = ""
+    @State private var liftoff = false
+
+    private func triggerComplete() {
+        guard !liftoff else { return }
+        withAnimation(.easeIn(duration: 0.55)) {
+            liftoff = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            onComplete()
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -18,7 +29,7 @@ struct TaskRowView: View {
                     if item.isCompleted {
                         onUncomplete?()
                     } else {
-                        onComplete()
+                        triggerComplete()
                     }
                 } label: {
                     Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -51,18 +62,31 @@ struct TaskRowView: View {
                             .foregroundStyle(item.isCompleted ? .secondary : .primary)
                             .strikethrough(item.isCompleted, color: .secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .overlay(alignment: .leading) {
+                                Image(systemName: "airplane")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+                                    .rotationEffect(.degrees(-10))
+                                    .offset(x: liftoff ? -2 : -28, y: liftoff ? -2 : 0)
+                                    .opacity(liftoff ? 1 : 0)
+                                    .allowsHitTesting(false)
+                            }
+                            .offset(x: liftoff ? 600 : 0)
+                            .opacity(liftoff ? 0 : 1)
 
                         if !item.notes.isEmpty {
                             Image(systemName: "note.text")
                                 .font(.system(size: 9))
                                 .foregroundStyle(.tertiary)
                                 .padding(.top, 3)
+                                .opacity(liftoff ? 0 : 1)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
+                .disabled(liftoff)
 
                 if let project = item.project {
                     Text(project)
@@ -73,6 +97,7 @@ struct TaskRowView: View {
                         .foregroundStyle(pillColor(for: project))
                         .clipShape(Capsule())
                         .fixedSize()
+                        .opacity(liftoff ? 0 : 1)
                 }
 
                 Text(DurationParser.format(minutes: item.effortMinutes))
@@ -80,6 +105,7 @@ struct TaskRowView: View {
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
                     .fixedSize()
+                    .opacity(liftoff ? 0 : 1)
             }
 
             if isExpanded {
