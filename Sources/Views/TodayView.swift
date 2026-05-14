@@ -4,6 +4,7 @@ struct TodayView: View {
     @Bindable var store: ScheduleStore
 
     @State private var greeting: Greeting = Greeting.pick()
+    @State private var showGreeting: Bool = true
 
     private var today: Date { Date() }
 
@@ -59,6 +60,39 @@ struct TodayView: View {
     }
 
     private var header: some View {
+        ZStack(alignment: .leading) {
+            greetingHeader
+                .offset(y: showGreeting ? 0 : -78)
+                .rotation3DEffect(
+                    .degrees(showGreeting ? 0 : 70),
+                    axis: (x: 1, y: 0, z: 0),
+                    anchor: .top,
+                    perspective: 0.5
+                )
+                .opacity(showGreeting ? 1 : 0)
+
+            dateHeader
+                .offset(y: showGreeting ? 78 : 0)
+                .rotation3DEffect(
+                    .degrees(showGreeting ? -70 : 0),
+                    axis: (x: 1, y: 0, z: 0),
+                    anchor: .bottom,
+                    perspective: 0.5
+                )
+                .opacity(showGreeting ? 0 : 1)
+        }
+        .frame(height: 78, alignment: .topLeading)
+        .clipped()
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(.timingCurve(0.65, 0.05, 0.36, 1, duration: 0.7)) {
+                    showGreeting = false
+                }
+            }
+        }
+    }
+
+    private var greetingHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(greeting.emoji)
@@ -70,7 +104,21 @@ struct TodayView: View {
             }
             Text(greeting.headline)
                 .font(.system(size: 28, weight: .bold))
-            Text("\(Self.dayFormatter.string(from: today))  •  \(progressLine)")
+            Text(progressLine)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var dateHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("TODAY")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.4)
+                .foregroundStyle(.tertiary)
+            Text(Self.dayFormatter.string(from: today))
+                .font(.system(size: 28, weight: .bold))
+            Text(progressLine)
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
