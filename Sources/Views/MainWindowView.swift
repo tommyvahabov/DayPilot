@@ -100,25 +100,7 @@ struct MainWindowView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if updateChecker.isUpdateAvailable, let url = updateChecker.releaseURL, let latest = updateChecker.latestVersion {
-                Button {
-                    NSWorkspace.shared.open(url)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 10))
-                        Text("Update to \(latest)")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule().fill(Color.accentColor)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
+            updateBadge
             HStack(spacing: 6) {
                 Circle()
                     .fill(Color.green)
@@ -130,6 +112,50 @@ struct MainWindowView: View {
             Text("~/scheduler/  •  v\(updateChecker.currentVersion)")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(.tertiary)
+        }
+    }
+
+    @ViewBuilder
+    private var updateBadge: some View {
+        switch updateChecker.status {
+        case .idle:
+            if updateChecker.isUpdateAvailable, let latest = updateChecker.latestVersion {
+                Button {
+                    Task { await updateChecker.installUpdate() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 10))
+                        Text("Update to \(latest)")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.accentColor))
+                }
+                .buttonStyle(.plain)
+                .help("Click to download and install the latest version")
+            }
+        case .downloading(let progress):
+            HStack(spacing: 6) {
+                ProgressView(value: progress).controlSize(.small).frame(width: 60)
+                Text("Downloading…")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        case .installing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Installing…")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let msg):
+            Text("Update failed: \(msg)")
+                .font(.system(size: 9))
+                .foregroundStyle(.red)
+                .lineLimit(2)
         }
     }
 
