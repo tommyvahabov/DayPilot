@@ -13,7 +13,7 @@ struct TaskRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 Button {
                     if item.isCompleted {
                         onUncomplete?()
@@ -22,15 +22,17 @@ struct TaskRowView: View {
                     }
                 } label: {
                     Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(item.isCompleted ? .green : .secondary)
-                        .frame(width: 20, height: 20)
+                        .font(.system(size: 14))
+                        .foregroundStyle(item.isCompleted ? AnyShapeStyle(Color.green) : AnyShapeStyle(.tertiary))
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.borderless)
 
-                Text("\(index).")
-                    .foregroundStyle(.secondary)
+                Text("\(index)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tertiary)
                     .monospacedDigit()
-                    .frame(width: 24, alignment: .trailing)
+                    .frame(width: 14, alignment: .trailing)
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -40,37 +42,42 @@ struct TaskRowView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(alignment: .top, spacing: 4) {
                         Text(item.title)
+                            .font(.system(size: 13))
                             .lineLimit(compact ? 1 : nil)
+                            .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: !compact)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(item.isCompleted ? .secondary : .primary)
+                            .strikethrough(item.isCompleted, color: .secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                         if !item.notes.isEmpty {
                             Image(systemName: "note.text")
-                                .font(.caption2)
+                                .font(.system(size: 9))
                                 .foregroundStyle(.tertiary)
+                                .padding(.top, 3)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
 
-                Spacer()
-
                 if let project = item.project {
                     Text(project)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(pillColor(for: project).opacity(0.2))
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(pillColor(for: project).opacity(0.18))
                         .foregroundStyle(pillColor(for: project))
                         .clipShape(Capsule())
                         .fixedSize()
                 }
 
                 Text(DurationParser.format(minutes: item.effortMinutes))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tertiary)
                     .monospacedDigit()
                     .fixedSize()
             }
@@ -107,7 +114,7 @@ struct TaskRowView: View {
                 .padding(.top, 2)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 
     private func pillColor(for name: String) -> Color {

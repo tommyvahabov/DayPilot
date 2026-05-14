@@ -7,14 +7,15 @@ struct ScheduleContentView: View {
 
     var body: some View {
         if let error = store.errorMessage {
-            VStack(spacing: 8) {
-                Image(systemName: "doc.text")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 10) {
+                Image(systemName: "airplane.departure")
+                    .font(.system(size: 32))
+                    .foregroundStyle(.tertiary)
                 Text(error)
-                    .font(.callout)
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if compact {

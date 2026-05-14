@@ -74,30 +74,51 @@ struct TaskSectionView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(headerAccent)
+                .frame(width: 5, height: 5)
+
             if collapsible {
                 Button(action: { withAnimation { isExpanded.toggle() } }) {
                     HStack(spacing: 4) {
+                        Text(title.uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .tracking(1.2)
+                            .foregroundStyle(.primary)
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption)
-                        Text(title)
-                            .font(.headline)
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .buttonStyle(.borderless)
             } else {
-                Text(title)
-                    .font(.headline)
+                Text(title.uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.2)
+                    .foregroundStyle(.primary)
             }
 
             Spacer()
 
             if let subtitle {
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
         }
-        .padding(.top, 8)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+    }
+
+    private var headerAccent: Color {
+        switch title.lowercased() {
+        case "today": return .green
+        case "done": return .secondary
+        case "tomorrow": return .blue
+        case "backlog": return .orange
+        default: return .accentColor
+        }
     }
 }
