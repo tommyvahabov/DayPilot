@@ -154,6 +154,46 @@ final class ScheduleStore {
         recompute()
     }
 
+    func saveProjectIfNew(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        if context.projects.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return
+        }
+
+        let fm = FileManager.default
+        let content = (try? String(contentsOfFile: memoryPath, encoding: .utf8)) ?? "# Memory\n"
+        var lines = content.components(separatedBy: .newlines)
+
+        let newEntry = "- \(trimmed) | priority: \(context.projects.count + 1)"
+
+        if let header = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## Projects" }) {
+            var insertAt = lines.count
+            for i in (header + 1)..<lines.count {
+                let t = lines[i].trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("##") {
+                    insertAt = i
+                    break
+                }
+                if !t.isEmpty { insertAt = i + 1 }
+            }
+            lines.insert(newEntry, at: insertAt)
+        } else {
+            if !lines.last!.isEmpty { lines.append("") }
+            lines.append("## Projects")
+            lines.append(newEntry)
+            lines.append("")
+        }
+
+        fileWatcher?.isSelfEditing = true
+        let result = lines.joined(separator: "\n")
+        if !fm.fileExists(atPath: memoryPath) {
+            try? fm.createDirectory(atPath: schedulerDir, withIntermediateDirectories: true)
+        }
+        try? result.write(toFile: memoryPath, atomically: true, encoding: .utf8)
+        recompute()
+    }
+
     func uncompleteByTitle(_ title: String) {
         fileWatcher?.isSelfEditing = true
         for (i, line) in rawTodoLines.enumerated() {

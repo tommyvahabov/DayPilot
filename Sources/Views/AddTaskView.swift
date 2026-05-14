@@ -18,20 +18,23 @@ struct AddTaskView: View {
         }
     }
 
+    @State private var newProjectDraft: String = ""
+    @State private var showNewProjectField = false
+
     private var compactView: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill")
                     .foregroundStyle(.tertiary)
                     .font(.system(size: 14))
 
-                TextField("What's next?  e.g. Ship landing page #quizpilot 45m", text: $title)
+                TextField("What's next?", text: $title)
                     .textFieldStyle(.plain)
                     .focused($fieldFocused)
-                    .onSubmit { addCompact() }
+                    .onSubmit { submit() }
 
                 if !title.isEmpty {
-                    Button(action: { addCompact() }) {
+                    Button(action: { submit() }) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 18))
                             .foregroundStyle(.tint)
@@ -41,21 +44,163 @@ struct AddTaskView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(.background.secondary)
-            )
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.background.secondary))
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(Color.primary.opacity(fieldFocused ? 0.18 : 0.08), lineWidth: 1)
             )
 
-            Text("Use #project, 30m / 1h, !YYYY-MM-DD")
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
+            if !selectedSummary.isEmpty {
+                HStack(spacing: 4) {
+                    Text(selectedSummary)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(action: clearSelections) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
                 .padding(.leading, 4)
+            }
+
+            chipRow(label: "Project", chips: projectChips, trailing: AnyView(newProjectControl))
+            chipRow(label: "Effort", chips: effortChips, trailing: nil)
+            chipRow(label: "Due", chips: deadlineChips, trailing: nil)
         }
     }
+
+    private var projectChips: [ChipModel] {
+        store.context.projects.prefix(6).map { p in
+            ChipModel(label: p.name, isSelected: project == p.name) {
+                project = (project == p.name) ? "" : p.name
+            }
+        }
+    }
+
+    private var effortChips: [ChipModel] {
+        ["15m", "30m", "1h", "2h"].map { v in
+            ChipModel(label: v, isSelected: effort == v) {
+                effort = (effort == v) ? "" : v
+            }
+        }
+    }
+
+    private var deadlineChips: [ChipModel] {
+        let today = Self.isoFormatter.string(from: Date())
+        let tomorrow = Self.isoFormatter.string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        return [
+            ChipModel(label: "Today", isSelected: deadline == today) {
+                deadline = (deadline == today) ? "" : today
+            },
+            ChipModel(label: "Tomorrow", isSelected: deadline == tomorrow) {
+                deadline = (deadline == tomorrow) ? "" : tomorrow
+            },
+        ]
+    }
+
+    private var newProjectControl: some View {
+        Group {
+            if showNewProjectField {
+                HStack(spacing: 4) {
+                    TextField("New project", text: $newProjectDraft)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 10))
+                        .frame(width: 80)
+                        .onSubmit { commitNewProject() }
+                    Button(action: commitNewProject) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tint)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(.background.secondary))
+            } else {
+                Button(action: { showNewProjectField = true }) {
+                    Label("New", systemImage: "plus")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().strokeBorder(Color.primary.opacity(0.15), style: StrokeStyle(lineWidth: 1, dash: [3])))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func chipRow(label: String, chips: [ChipModel], trailing: AnyView?) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 44, alignment: .leading)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(chips) { chip in
+                        ChipView(chip: chip)
+                    }
+                    if let trailing = trailing { trailing }
+                }
+            }
+        }
+    }
+
+    private func commitNewProject() {
+        let trimmed = newProjectDraft.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            showNewProjectField = false
+            return
+        }
+        store.saveProjectIfNew(trimmed)
+        project = trimmed
+        newProjectDraft = ""
+        showNewProjectField = false
+    }
+
+    private func clearSelections() {
+        project = ""
+        effort = ""
+        deadline = ""
+    }
+
+    private var selectedSummary: String {
+        var parts: [String] = []
+        if !project.isEmpty { parts.append(project) }
+        if !effort.isEmpty { parts.append(effort) }
+        if !deadline.isEmpty {
+            let today = Self.isoFormatter.string(from: Date())
+            let tomorrow = Self.isoFormatter.string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+            if deadline == today { parts.append("Today") }
+            else if deadline == tomorrow { parts.append("Tomorrow") }
+            else { parts.append(deadline) }
+        }
+        return parts.joined(separator: "  ·  ")
+    }
+
+    private func submit() {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        var raw = trimmed
+        if !project.isEmpty { raw += " | project: \(project)" }
+        if !effort.isEmpty { raw += " | effort: \(effort)" }
+        if !deadline.isEmpty { raw += " | deadline: \(deadline)" }
+        if !project.isEmpty { store.saveProjectIfNew(project) }
+        store.addTask(raw: raw)
+        title = ""
+        clearSelections()
+    }
+
+    private static let isoFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 
     private var expandedView: some View {
         HStack(spacing: 12) {
@@ -100,66 +245,29 @@ struct AddTaskView: View {
         deadline = ""
     }
 
-    private func addCompact() {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
+}
 
-        let parsed = Self.smartParse(trimmed)
-        var raw = parsed.title
-        if let p = parsed.project { raw += " | project: \(p)" }
-        if let e = parsed.effort { raw += " | effort: \(e)" }
-        if let d = parsed.deadline { raw += " | deadline: \(d)" }
+struct ChipModel: Identifiable {
+    let id = UUID()
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+}
 
-        store.addTask(raw: raw)
-        title = ""
-    }
+struct ChipView: View {
+    let chip: ChipModel
 
-    static func smartParse(_ input: String) -> (title: String, project: String?, effort: String?, deadline: String?) {
-        var titleTokens: [String] = []
-        var project: String?
-        var effort: String?
-        var deadline: String?
-
-        for token in input.split(separator: " ").map(String.init) {
-            if (token.hasPrefix("#") || token.hasPrefix("@")) && token.count > 1 {
-                project = String(token.dropFirst())
-            } else if token.hasPrefix("!") && token.count > 1 && isDate(String(token.dropFirst())) {
-                deadline = String(token.dropFirst())
-            } else if effort == nil && isDuration(token) {
-                effort = token
-            } else {
-                titleTokens.append(token)
-            }
+    var body: some View {
+        Button(action: chip.action) {
+            Text(chip.label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(chip.isSelected ? Color.white : Color.primary.opacity(0.75))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule().fill(chip.isSelected ? Color.accentColor : Color.primary.opacity(0.06))
+                )
         }
-
-        return (titleTokens.joined(separator: " "), project, effort, deadline)
-    }
-
-    private static func isDuration(_ s: String) -> Bool {
-        let lower = s.lowercased()
-        guard !lower.isEmpty else { return false }
-        var i = lower.startIndex
-        var sawHour = false
-        var sawMinute = false
-        while i < lower.endIndex {
-            guard lower[i].isNumber else { return false }
-            var digitEnd = i
-            while digitEnd < lower.endIndex, lower[digitEnd].isNumber {
-                digitEnd = lower.index(after: digitEnd)
-            }
-            guard digitEnd < lower.endIndex else { return false }
-            let unit = lower[digitEnd]
-            if unit == "h" && !sawHour && !sawMinute { sawHour = true }
-            else if unit == "m" && !sawMinute { sawMinute = true }
-            else { return false }
-            i = lower.index(after: digitEnd)
-        }
-        return sawHour || sawMinute
-    }
-
-    private static func isDate(_ s: String) -> Bool {
-        let parts = s.split(separator: "-")
-        guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2 else { return false }
-        return parts.allSatisfy { $0.allSatisfy { $0.isNumber } }
+        .buttonStyle(.plain)
     }
 }
