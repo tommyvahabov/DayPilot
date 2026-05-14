@@ -3,6 +3,8 @@ import SwiftUI
 struct TodayView: View {
     @Bindable var store: ScheduleStore
 
+    @State private var greeting: Greeting = Greeting.pick()
+
     private var today: Date { Date() }
 
     private static let dayFormatter: DateFormatter = {
@@ -58,13 +60,17 @@ struct TodayView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("TODAY")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.4)
-                .foregroundStyle(.tertiary)
-            Text(Self.dayFormatter.string(from: today))
+            HStack(spacing: 8) {
+                Text(greeting.emoji)
+                    .font(.system(size: 14))
+                Text(greeting.label)
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(greeting.headline)
                 .font(.system(size: 28, weight: .bold))
-            Text(progressLine)
+            Text("\(Self.dayFormatter.string(from: today))  •  \(progressLine)")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
@@ -89,5 +95,58 @@ struct TodayView: View {
         if h == 0 { return "\(mm)m" }
         if mm == 0 { return "\(h)h" }
         return "\(h)h \(mm)m"
+    }
+}
+
+struct Greeting {
+    let label: String      // small caps label
+    let headline: String   // big greeting line
+    let emoji: String
+
+    static func pick(at date: Date = Date()) -> Greeting {
+        let hour = Calendar.current.component(.hour, from: date)
+        let pool: [Greeting]
+
+        switch hour {
+        case 0..<4:
+            pool = [
+                Greeting(label: "STILL UP",     headline: "Still grinding, founder?", emoji: "🌙"),
+                Greeting(label: "LATE NIGHT",   headline: "Sleep is a strategy.",     emoji: "🌑"),
+                Greeting(label: "AFTER HOURS",  headline: "Most quit hours ago.",     emoji: "🕯️"),
+                Greeting(label: "GHOST SHIFT",  headline: "It's tomorrow already.",   emoji: "👻"),
+            ]
+        case 4..<6:
+            pool = [
+                Greeting(label: "EARLY BIRD",   headline: "Up before the sun.",       emoji: "🌅"),
+                Greeting(label: "PRE-DAWN",     headline: "First mover, founder.",    emoji: "☕"),
+            ]
+        case 6..<12:
+            pool = [
+                Greeting(label: "MORNING",      headline: "Good morning, founder.",   emoji: "☀️"),
+                Greeting(label: "MORNING",      headline: "Up and shipping.",         emoji: "🚀"),
+                Greeting(label: "MORNING",      headline: "Coffee's on. Let's move.", emoji: "☕"),
+                Greeting(label: "MORNING",      headline: "Make it a day, founder.",  emoji: "✈️"),
+            ]
+        case 12..<17:
+            pool = [
+                Greeting(label: "AFTERNOON",    headline: "Good afternoon, founder.", emoji: "🌤️"),
+                Greeting(label: "AFTERNOON",    headline: "Halfway through. Keep going.", emoji: "🛫"),
+                Greeting(label: "AFTERNOON",    headline: "Still daylight to ship.",  emoji: "🌞"),
+            ]
+        case 17..<21:
+            pool = [
+                Greeting(label: "EVENING",      headline: "Good evening, founder.",   emoji: "🌆"),
+                Greeting(label: "EVENING",      headline: "Wrap mode, founder.",      emoji: "🛬"),
+                Greeting(label: "EVENING",      headline: "Closing the day strong.",  emoji: "🌇"),
+            ]
+        default: // 21..<24
+            pool = [
+                Greeting(label: "LATE",         headline: "One more push, founder?",  emoji: "🌙"),
+                Greeting(label: "LATE",         headline: "Late shift, captain.",     emoji: "🌒"),
+                Greeting(label: "LATE",         headline: "Day's almost wheels-up.",  emoji: "🛩️"),
+            ]
+        }
+
+        return pool.randomElement() ?? pool[0]
     }
 }
