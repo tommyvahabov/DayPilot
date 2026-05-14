@@ -2,12 +2,14 @@ import SwiftUI
 import AppKit
 
 enum SidebarTab: String, CaseIterable {
+    case today = "Today"
     case runway = "Runway"
     case flightLog = "Flight Log"
     case settings = "Settings"
 
     var icon: String {
         switch self {
+        case .today: return "sun.max.fill"
         case .runway: return "airplane.departure"
         case .flightLog: return "book.closed.fill"
         case .settings: return "gearshape.fill"
@@ -16,6 +18,7 @@ enum SidebarTab: String, CaseIterable {
 
     var accent: Color {
         switch self {
+        case .today: return .orange
         case .runway: return .accentColor
         case .flightLog: return .indigo
         case .settings: return .secondary
@@ -26,7 +29,7 @@ enum SidebarTab: String, CaseIterable {
 struct MainWindowView: View {
     @Bindable var store: ScheduleStore
     @Bindable var updateChecker: UpdateChecker
-    @State private var selectedTab: SidebarTab = .runway
+    @State private var selectedTab: SidebarTab = .today
 
     var body: some View {
         NavigationSplitView {
@@ -162,6 +165,8 @@ struct MainWindowView: View {
     @ViewBuilder
     private var detail: some View {
         switch selectedTab {
+        case .today:
+            TodayView(store: store)
         case .runway:
             RunwayDashboardView(store: store)
         case .flightLog:
