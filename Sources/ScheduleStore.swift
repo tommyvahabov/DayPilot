@@ -35,6 +35,7 @@ final class ScheduleStore {
         guard !started else { return }
         started = true
         bootstrapSchedulerDirectory()
+        ClaudeIntegration.ensureRegistered()
         recompute()
         setupFileWatcher()
     }

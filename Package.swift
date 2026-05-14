@@ -8,7 +8,12 @@ let package = Package(
         .executableTarget(
             name: "DayPilot",
             path: "Sources",
+            exclude: ["MCPServer"],
             swiftSettings: [.enableUpcomingFeature("BareSlashRegexLiterals")]
+        ),
+        .executableTarget(
+            name: "DayPilotMCP",
+            path: "Sources/MCPServer"
         ),
         .testTarget(
             name: "DayPilotTests",

@@ -11,8 +11,9 @@ RESOURCES="$CONTENTS/Resources"
 rm -rf "$BUNDLE_DIR"
 mkdir -p "$MACOS" "$RESOURCES"
 
-# Copy binary
+# Copy binaries
 cp ".build/arm64-apple-macosx/release/$APP_NAME" "$MACOS/$APP_NAME"
+cp ".build/arm64-apple-macosx/release/${APP_NAME}MCP" "$MACOS/${APP_NAME}MCP"
 
 # Copy app icon and runtime images directly into Contents/Resources/
 # Loaded via Bundle.main.url at runtime — no SPM resource bundle dependency.
