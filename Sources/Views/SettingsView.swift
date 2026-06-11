@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Bindable var store: ScheduleStore
     @State private var capacityText: String = ""
     @AppStorage("hudMode") private var hudMode: String = "compact"
+    @AppStorage("autoGitEnabled") private var autoGitEnabled: Bool = true
 
     var body: some View {
         ScrollView {
@@ -111,6 +112,19 @@ struct SettingsView: View {
                 fileRow(name: "todos.md", description: "Your task list")
                 fileRow(name: "memory.md", description: "Projects, priorities, capacity")
                 fileRow(name: "done.md", description: "Completion log")
+
+                Toggle(isOn: $autoGitEnabled) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Auto-commit changes to git")
+                            .font(.system(size: 12))
+                        Text("Every change becomes a diff — Claude included.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .padding(.top, 4)
 
                 Button {
                     let path = NSHomeDirectory() + "/scheduler"

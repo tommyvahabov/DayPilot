@@ -16,6 +16,7 @@ final class ScheduleStore {
 
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
+    private let git: GitService
 
     var todosPath: String { "\(schedulerDir)/todos.md" }
     var memoryPath: String { "\(schedulerDir)/memory.md" }
@@ -37,6 +38,7 @@ final class ScheduleStore {
 
     init() {
         self.schedulerDir = NSHomeDirectory() + "/scheduler"
+        self.git = GitService(directory: schedulerDir)
     }
 
     func start() {
@@ -569,6 +571,7 @@ final class ScheduleStore {
     private func writeBack() {
         let content = rawTodoLines.joined(separator: "\n")
         try? content.write(toFile: todosPath, atomically: true, encoding: .utf8)
+        git.commitSoon("app: update todos")
     }
 
     private func setupFileWatcher() {
@@ -577,7 +580,9 @@ final class ScheduleStore {
         let paths = [todosPath, memoryPath].filter { FileManager.default.fileExists(atPath: $0) }
         fileWatcher = FileWatcher(filePaths: paths) { [weak self] in
             Task { @MainActor in
-                self?.recompute()
+                guard let self else { return }
+                self.recompute()
+                self.git.commitSoon("external edit (claude/mcp or manual)")
             }
         }
     }
