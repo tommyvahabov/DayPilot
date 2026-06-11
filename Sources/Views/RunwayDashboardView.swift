@@ -148,11 +148,19 @@ struct RunwayDashboardView: View {
         HStack(spacing: 12) {
             AddTaskView(store: store, compact: false)
 
-            Button(action: { store.recompute() }) {
-                Label("Reschedule", systemImage: "arrow.clockwise")
+            if let s = store.lastGoAround {
+                Text("\(s.kept) kept · \(s.diverted) diverted")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            Button(action: { store.goAround() }) {
+                Label("Go-Around", systemImage: "arrow.uturn.up")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .help("Repack what's left of today from now; divert the rest to tomorrow (⌃⌥G)")
         }
     }
 

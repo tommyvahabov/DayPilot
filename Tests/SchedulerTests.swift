@@ -144,4 +144,40 @@ struct SchedulerTests {
         let eta = Scheduler.wheelsDown(now: now, remainingMinutes: 90)
         #expect(eta == now.addingTimeInterval(90 * 60))
     }
+
+    // MARK: Reflow (Go-Around)
+
+    @Test func reflowKeepsWhatFitsAndDivertsTheRest() {
+        // 14:00, capacity 6h, 2h done → available = min(8h until 22:00, 4h) = 4h
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        let todos = [
+            TodoItem(title: "A", effortMinutes: 120, lineIndex: 1),
+            TodoItem(title: "B", effortMinutes: 120, lineIndex: 2),
+            TodoItem(title: "C", effortMinutes: 60, lineIndex: 3),
+        ]
+        let result = Scheduler.reflow(todos: todos, context: ctx, now: date(hour: 14), minutesDoneToday: 120)
+        #expect(result.kept.map(\.title) == ["A", "B"])
+        #expect(result.diverted.map(\.title) == ["C"])
+    }
+
+    @Test func reflowIgnoresAlreadyDeferredTasks() {
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let todos = [
+            TodoItem(title: "Live", effortMinutes: 60, lineIndex: 1),
+            TodoItem(title: "Snoozed", effortMinutes: 60, lineIndex: 2, deferUntil: tomorrow),
+        ]
+        let result = Scheduler.reflow(todos: todos, context: ctx, now: date(hour: 10), minutesDoneToday: 0)
+        #expect(result.kept.map(\.title) == ["Live"])
+        #expect(result.diverted.isEmpty)
+    }
+
+    @Test func reflowLateEveningDivertsEverything() {
+        // 21:30 → only 30m until adminEnd; a 60m task can't land
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        let todos = [TodoItem(title: "Too big", effortMinutes: 60, lineIndex: 1)]
+        let result = Scheduler.reflow(todos: todos, context: ctx, now: date(hour: 21, minute: 30), minutesDoneToday: 0)
+        #expect(result.kept.isEmpty)
+        #expect(result.diverted.map(\.title) == ["Too big"])
+    }
 }

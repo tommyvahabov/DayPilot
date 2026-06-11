@@ -53,6 +53,33 @@ enum Scheduler {
         return DayQueue(today: today, tomorrow: tomorrow, backlog: backlog)
     }
 
+    // MARK: - Go-Around
+
+    /// Repack the remaining open tasks into what's actually left of the day:
+    /// time until the admin block ends, capped by unspent capacity. Whatever
+    /// doesn't fit is diverted (caller defers it to tomorrow with a carry).
+    static func reflow(todos: [TodoItem], context: MemoryContext, now: Date, minutesDoneToday: Int) -> (kept: [TodoItem], diverted: [TodoItem]) {
+        let cal = Calendar.current
+        let endOfDay = cal.date(bySettingHour: context.energy.adminEnd, minute: 0, second: 0, of: now) ?? now
+        let untilEnd = max(0, Int(endOfDay.timeIntervalSince(now) / 60))
+        let available = min(untilEnd, max(0, context.dailyCapacityMinutes - minutesDoneToday))
+        let startOfTomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now))!
+
+        var kept: [TodoItem] = []
+        var diverted: [TodoItem] = []
+        var used = 0
+        for item in todos.sorted(by: { lessThan($0, $1, context: context) }) {
+            if let d = item.deferUntil, d >= startOfTomorrow { continue }  // already not today's problem
+            if used + item.effortMinutes <= available {
+                kept.append(item)
+                used += item.effortMinutes
+            } else {
+                diverted.append(item)
+            }
+        }
+        return (kept, diverted)
+    }
+
     // MARK: - Flight math
 
     static func wheelsDown(now: Date, remainingMinutes: Int) -> Date {

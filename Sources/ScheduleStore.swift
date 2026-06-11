@@ -263,6 +263,32 @@ final class ScheduleStore {
         case today, tomorrow, backlog
     }
 
+    // MARK: - Go-Around
+
+    struct GoAroundSummary: Equatable {
+        var kept: Int
+        var diverted: Int
+    }
+
+    var lastGoAround: GoAroundSummary?
+
+    /// Replan around reality: repack what's left of today from NOW; anything
+    /// that no longer fits is deferred to tomorrow with its carry count bumped.
+    func goAround() {
+        let open = TodoParser.parse(lines: rawTodoLines)
+        let result = Scheduler.reflow(todos: open, context: context, now: Date(), minutesDoneToday: minutesDoneToday)
+        let tomorrow = Self.dateFormatter.string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        for item in result.diverted {
+            var line = TodoParser.setToken(line: rawTodoLines[item.lineIndex], key: "defer", value: tomorrow)
+            line = TodoParser.setToken(line: line, key: "carried", value: String(item.carried + 1))
+            rawTodoLines[item.lineIndex] = line
+        }
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
+        lastGoAround = GoAroundSummary(kept: result.kept.count, diverted: result.diverted.count)
+    }
+
     // MARK: - Flight math
 
     var remainingTodayMinutes: Int {

@@ -21,13 +21,14 @@ struct ScheduleView: View {
                 .padding(.bottom, 6)
 
             HStack(spacing: 6) {
-                Button(action: { store.recompute() }) {
-                    Label("Reschedule", systemImage: "arrow.clockwise")
+                Button(action: { store.goAround() }) {
+                    Label(goAroundLabel, systemImage: "arrow.uturn.up")
                         .font(.caption)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
+                .help("Repack what's left of today from now; divert the rest to tomorrow (⌃⌥G)")
 
                 Button(action: { openWindow(id: "main-window") }) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -43,5 +44,17 @@ struct ScheduleView: View {
         }
         .frame(width: 360, height: 560)
         .onAppear { store.start() }
+        .task(id: store.lastGoAround) {
+            guard store.lastGoAround != nil else { return }
+            try? await Task.sleep(for: .seconds(4))
+            store.lastGoAround = nil
+        }
+    }
+
+    private var goAroundLabel: String {
+        if let s = store.lastGoAround {
+            return "Go-around: \(s.kept) kept · \(s.diverted) diverted"
+        }
+        return "Go-Around"
     }
 }
