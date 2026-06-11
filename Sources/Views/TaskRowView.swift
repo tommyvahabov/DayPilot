@@ -99,6 +99,19 @@ struct TaskRowView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+                if item.carried >= 3 {
+                    Label("\(item.carried)", systemImage: "arrow.uturn.right.circle")
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.orange.opacity(0.18))
+                        .foregroundStyle(.orange)
+                        .clipShape(Capsule())
+                        .fixedSize()
+                        .opacity(liftoff ? 0 : 1)
+                        .help("Carried \(item.carried) days — still worth hauling?")
+                }
+
                 if let project = item.project {
                     Text(project)
                         .font(.system(size: 9, weight: .semibold))

@@ -8,6 +8,7 @@ struct TodayView: View {
 
     @State private var greeting: Greeting = Greeting.pick()
     @State private var showGreeting: Bool = !TodayView.greetingShownThisLaunch
+    @State private var showPostflight = false
 
     private var today: Date { Date() }
 
@@ -29,6 +30,8 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+
+                PreflightCardView(store: store)
 
                 SectionCardView(
                     title: "Today",
@@ -59,6 +62,9 @@ struct TodayView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(.background)
+        .sheet(isPresented: $showPostflight) {
+            PostflightView(store: store)
+        }
     }
 
     private var header: some View {
@@ -115,16 +121,33 @@ struct TodayView: View {
     }
 
     private var dateHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("TODAY")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.4)
-                .foregroundStyle(.tertiary)
-            Text(Self.dayFormatter.string(from: today))
-                .font(.system(size: 28, weight: .bold))
-            Text(progressLine)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("TODAY")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(.tertiary)
+                Text(Self.dayFormatter.string(from: today))
+                    .font(.system(size: 28, weight: .bold))
+                Text(progressLine)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if store.dayClosedToday {
+                Label("Flight closed", systemImage: "airplane.arrival")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Button {
+                    showPostflight = true
+                } label: {
+                    Label("Close the day", systemImage: "airplane.arrival")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
         }
     }
 

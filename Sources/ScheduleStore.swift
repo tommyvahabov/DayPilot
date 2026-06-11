@@ -397,6 +397,55 @@ final class ScheduleStore {
         recompute()
     }
 
+    private var todayDoneDay: DoneDay? {
+        let today = Self.dateFormatter.string(from: Date())
+        return doneLog.first { $0.date == today }
+    }
+
+    var preflightDoneToday: Bool { todayDoneDay?.preflight != nil }
+    var dayClosedToday: Bool { todayDoneDay?.closed != nil }
+
+    enum EndOfDayChoice {
+        case tomorrow, backlog, scrap
+    }
+
+    /// Post-flight: walk today's leftovers with a conscious choice per task,
+    /// then stamp the day closed. The anti-guilt-pile.
+    func closeDay(decisions: [UUID: EndOfDayChoice]) {
+        let shipped = queue.completedToday.count
+        var diverted = 0
+        var scrapped = 0
+        var scrapTitles: [String] = []
+        let tomorrowStr = Self.dateFormatter.string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+
+        // Descending lineIndex so removals never invalidate pending indexes.
+        for item in queue.today.sorted(by: { $0.lineIndex > $1.lineIndex }) {
+            switch decisions[item.id] ?? .tomorrow {
+            case .tomorrow:
+                var line = TodoParser.setToken(line: rawTodoLines[item.lineIndex], key: "defer", value: tomorrowStr)
+                line = TodoParser.setToken(line: line, key: "carried", value: String(item.carried + 1))
+                rawTodoLines[item.lineIndex] = line
+                diverted += 1
+            case .backlog:
+                let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
+                let block = Array(rawTodoLines[item.lineIndex..<(item.lineIndex + len)])
+                rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+                rawTodoLines.append(contentsOf: block)  // bottom of file = lowest tiebreak
+            case .scrap:
+                let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
+                rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+                scrapTitles.append(item.title)
+                scrapped += 1
+            }
+        }
+
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        for title in scrapTitles { appendDayMarker("scrapped: \(title)") }
+        appendDayMarker("closed \(Self.clockFormatter.string(from: Date())) | shipped: \(shipped) | diverted: \(diverted) | scrapped: \(scrapped)")
+        recompute()
+    }
+
     private func removeFromDoneLog(_ item: TodoItem) {
         guard FileManager.default.fileExists(atPath: donePath) else { return }
         guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return }
