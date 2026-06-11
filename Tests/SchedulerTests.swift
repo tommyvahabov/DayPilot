@@ -83,6 +83,38 @@ struct SchedulerTests {
         #expect(queue.backlog.isEmpty)
     }
 
+    // MARK: Defer
+
+    @Test func deferredToTomorrowLandsInTomorrow() {
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let todos = [
+            TodoItem(title: "Now", project: "Alpha", effortMinutes: 15, lineIndex: 1),
+            TodoItem(title: "Deferred", project: "Alpha", effortMinutes: 15, lineIndex: 2, deferUntil: tomorrow),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.map(\.title) == ["Now"])
+        #expect(queue.tomorrow.map(\.title) == ["Deferred"])
+    }
+
+    @Test func deferredFurtherOutLandsInBacklog() {
+        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: Date())!
+        let todos = [
+            TodoItem(title: "Someday", project: "Alpha", effortMinutes: 15, lineIndex: 1, deferUntil: nextWeek),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.isEmpty)
+        #expect(queue.backlog.map(\.title) == ["Someday"])
+    }
+
+    @Test func pastDeferIsIgnored() {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let todos = [
+            TodoItem(title: "Was snoozed", project: "Alpha", effortMinutes: 15, lineIndex: 1, deferUntil: yesterday),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.map(\.title) == ["Was snoozed"])
+    }
+
     // MARK: Flight math
 
     private func date(hour: Int, minute: Int = 0) -> Date {

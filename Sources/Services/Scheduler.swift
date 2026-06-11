@@ -1,20 +1,25 @@
 import Foundation
 
 enum Scheduler {
-    static func schedule(todos: [TodoItem], context: MemoryContext) -> DayQueue {
-        let sorted = todos.sorted { a, b in
-            let aDeadline = a.deadline ?? Date.distantFuture
-            let bDeadline = b.deadline ?? Date.distantFuture
-            if aDeadline != bDeadline { return aDeadline < bDeadline }
+    /// deadline > project priority > file order (so manual reordering survives
+    /// recomputes — effort used to be the tiebreak, which stomped user intent).
+    private static func lessThan(_ a: TodoItem, _ b: TodoItem, context: MemoryContext) -> Bool {
+        let aDeadline = a.deadline ?? Date.distantFuture
+        let bDeadline = b.deadline ?? Date.distantFuture
+        if aDeadline != bDeadline { return aDeadline < bDeadline }
 
-            let aPriority = context.priority(for: a.project)
-            let bPriority = context.priority(for: b.project)
-            if aPriority != bPriority { return aPriority < bPriority }
+        let aPriority = context.priority(for: a.project)
+        let bPriority = context.priority(for: b.project)
+        if aPriority != bPriority { return aPriority < bPriority }
 
-            // File order is the final tiebreak so manual reordering survives
-            // recomputes (effort used to win here, which stomped user intent).
-            return a.lineIndex < b.lineIndex
-        }
+        return a.lineIndex < b.lineIndex
+    }
+
+    static func schedule(todos: [TodoItem], context: MemoryContext, today date: Date = Date()) -> DayQueue {
+        let sorted = todos.sorted { lessThan($0, $1, context: context) }
+
+        let cal = Calendar.current
+        let startOfTomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: date))!
 
         var today: [TodoItem] = []
         var tomorrow: [TodoItem] = []
@@ -24,6 +29,16 @@ enum Scheduler {
         let cap = context.dailyCapacityMinutes
 
         for item in sorted {
+            // Deferred tasks skip today's packing entirely.
+            if let d = item.deferUntil, d >= startOfTomorrow {
+                if cal.isDate(d, inSameDayAs: startOfTomorrow), tomorrowTotal + item.effortMinutes <= cap {
+                    tomorrow.append(item)
+                    tomorrowTotal += item.effortMinutes
+                } else {
+                    backlog.append(item)
+                }
+                continue
+            }
             if todayTotal + item.effortMinutes <= cap {
                 today.append(item)
                 todayTotal += item.effortMinutes
