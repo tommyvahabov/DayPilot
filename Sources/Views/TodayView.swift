@@ -33,6 +33,8 @@ struct TodayView: View {
 
                 PreflightCardView(store: store)
 
+                BriefingCardView(store: store)
+
                 ProposalsView(store: store)
 
                 SectionCardView(

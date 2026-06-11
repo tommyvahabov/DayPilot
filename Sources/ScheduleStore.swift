@@ -21,6 +21,10 @@ final class ScheduleStore {
     var todosPath: String { "\(schedulerDir)/todos.md" }
     var memoryPath: String { "\(schedulerDir)/memory.md" }
     var donePath: String { "\(schedulerDir)/done.md" }
+    var briefingPath: String { "\(schedulerDir)/briefing.md" }
+
+    /// Claude's morning briefing body, only when briefing.md is dated today.
+    private(set) var briefing: String?
 
     private var started = false
 
@@ -114,6 +118,7 @@ final class ScheduleStore {
 
             queue = Scheduler.schedule(todos: todos, context: context)
             proposals = TodoParser.proposals(lines: rawTodoLines)
+            briefing = readBriefing()
 
             // Filter completed to only today's by matching titles in done.md
             let todayTitles = Set(todayDoneTitles())
@@ -401,6 +406,17 @@ final class ScheduleStore {
     func markPreflight() {
         appendDayMarker("preflight \(Self.clockFormatter.string(from: Date()))")
         recompute()
+    }
+
+    private func readBriefing() -> String? {
+        guard let content = try? String(contentsOfFile: briefingPath, encoding: .utf8) else { return nil }
+        var lines = content.components(separatedBy: .newlines)
+        guard let first = lines.first else { return nil }
+        let today = Self.dateFormatter.string(from: Date())
+        guard first.hasPrefix("# Briefing"), first.contains(today) else { return nil }
+        lines.removeFirst()
+        let body = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return body.isEmpty ? nil : body
     }
 
     // MARK: - Proposals
