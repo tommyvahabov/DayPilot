@@ -17,6 +17,12 @@ final class ScheduleStore {
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
     private let git: GitService
+    private var tickTimer: Timer?
+
+    /// Minute tick. Views (esp. the menubar HUD label) read this so @Observable
+    /// re-renders them as time passes — MenuBarExtra labels can't host
+    /// TimelineView (it fails to render in an NSStatusItem).
+    private(set) var now: Date = Date()
 
     var todosPath: String { "\(schedulerDir)/todos.md" }
     var memoryPath: String { "\(schedulerDir)/memory.md" }
@@ -52,6 +58,9 @@ final class ScheduleStore {
         ClaudeIntegration.ensureRegistered()
         recompute()
         setupFileWatcher()
+        tickTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.now = Date() }
+        }
     }
 
     private func bootstrapSchedulerDirectory() {
@@ -317,12 +326,12 @@ final class ScheduleStore {
     }
 
     var wheelsDownDate: Date {
-        Scheduler.wheelsDown(now: Date(), remainingMinutes: remainingTodayMinutes)
+        Scheduler.wheelsDown(now: now, remainingMinutes: remainingTodayMinutes)
     }
 
     var cautionActive: Bool {
         !queue.today.isEmpty && Scheduler.cautionActive(
-            now: Date(),
+            now: now,
             remainingMinutes: remainingTodayMinutes,
             minutesDoneToday: minutesDoneToday,
             context: context
