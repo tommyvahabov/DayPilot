@@ -11,13 +11,20 @@ final class ScheduleStore {
     private(set) var completedTodayCount: Int = 0
     private(set) var totalTodayCount: Int = 0
     private(set) var doneLog: [DoneDay] = []
+    /// Agent-proposed `- [?]` tasks awaiting accept/reject.
+    private(set) var proposals: [TodoItem] = []
 
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
+    private let git: GitService
 
     var todosPath: String { "\(schedulerDir)/todos.md" }
     var memoryPath: String { "\(schedulerDir)/memory.md" }
     var donePath: String { "\(schedulerDir)/done.md" }
+    var briefingPath: String { "\(schedulerDir)/briefing.md" }
+
+    /// Claude's morning briefing body, only when briefing.md is dated today.
+    private(set) var briefing: String?
 
     private var started = false
 
@@ -27,8 +34,15 @@ final class ScheduleStore {
         return f
     }()
 
+    private static let clockFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     init() {
         self.schedulerDir = NSHomeDirectory() + "/scheduler"
+        self.git = GitService(directory: schedulerDir)
     }
 
     func start() {
@@ -103,6 +117,8 @@ final class ScheduleStore {
             }
 
             queue = Scheduler.schedule(todos: todos, context: context)
+            proposals = TodoParser.proposals(lines: rawTodoLines)
+            briefing = readBriefing()
 
             // Filter completed to only today's by matching titles in done.md
             let todayTitles = Set(todayDoneTitles())
@@ -226,16 +242,91 @@ final class ScheduleStore {
         recompute()
     }
 
-    func moveTask(from source: IndexSet, to destination: Int, in section: Section) {
+    /// Persist a manual reorder by moving the task's line block (task + notes)
+    /// within todos.md. File order is the scheduler's tiebreak, so the new
+    /// order survives recomputes and restarts.
+    func moveTask(id: UUID, toIndex: Int, in section: Section) {
+        let items: [TodoItem]
         switch section {
-        case .today: queue.today.move(fromOffsets: source, toOffset: destination)
-        case .tomorrow: queue.tomorrow.move(fromOffsets: source, toOffset: destination)
-        case .backlog: queue.backlog.move(fromOffsets: source, toOffset: destination)
+        case .today: items = queue.today
+        case .tomorrow: items = queue.tomorrow
+        case .backlog: items = queue.backlog
         }
+        guard let fromIndex = items.firstIndex(where: { $0.id == id }),
+              fromIndex != toIndex, toIndex >= 0, toIndex < items.count else { return }
+
+        let moving = items[fromIndex]
+        let target = items[toIndex]
+        let blockLen = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: moving.lineIndex)
+        let block = Array(rawTodoLines[moving.lineIndex..<(moving.lineIndex + blockLen)])
+        rawTodoLines.removeSubrange(moving.lineIndex..<(moving.lineIndex + blockLen))
+
+        var targetLine = target.lineIndex
+        if targetLine > moving.lineIndex { targetLine -= blockLen }
+        let insertAt: Int
+        if fromIndex < toIndex {  // moving down → land after the target's block
+            insertAt = targetLine + 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: targetLine)
+        } else {                  // moving up → land before the target
+            insertAt = targetLine
+        }
+        rawTodoLines.insert(contentsOf: block, at: insertAt)
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
     }
 
     enum Section {
         case today, tomorrow, backlog
+    }
+
+    // MARK: - Go-Around
+
+    struct GoAroundSummary: Equatable {
+        var kept: Int
+        var diverted: Int
+    }
+
+    var lastGoAround: GoAroundSummary?
+
+    /// Replan around reality: repack what's left of today from NOW; anything
+    /// that no longer fits is deferred to tomorrow with its carry count bumped.
+    func goAround() {
+        let open = TodoParser.parse(lines: rawTodoLines)
+        let result = Scheduler.reflow(todos: open, context: context, now: Date(), minutesDoneToday: minutesDoneToday)
+        let tomorrow = Self.dateFormatter.string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+        for item in result.diverted {
+            var line = TodoParser.setToken(line: rawTodoLines[item.lineIndex], key: "defer", value: tomorrow)
+            line = TodoParser.setToken(line: line, key: "carried", value: String(item.carried + 1))
+            rawTodoLines[item.lineIndex] = line
+        }
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
+        lastGoAround = GoAroundSummary(kept: result.kept.count, diverted: result.diverted.count)
+    }
+
+    // MARK: - Flight math
+
+    /// Calibrated remaining minutes — what the ETA and caution math believe.
+    var remainingTodayMinutes: Int {
+        queue.today.reduce(0) { $0 + Scheduler.effectiveEffort($1, context: context) }
+    }
+
+    var minutesDoneToday: Int {
+        queue.completedToday.reduce(0) { $0 + $1.effortMinutes }
+    }
+
+    var wheelsDownDate: Date {
+        Scheduler.wheelsDown(now: Date(), remainingMinutes: remainingTodayMinutes)
+    }
+
+    var cautionActive: Bool {
+        !queue.today.isEmpty && Scheduler.cautionActive(
+            now: Date(),
+            remainingMinutes: remainingTodayMinutes,
+            minutesDoneToday: minutesDoneToday,
+            context: context
+        )
     }
 
     // MARK: - Daily Summary
@@ -257,10 +348,7 @@ final class ScheduleStore {
                 if l.hasPrefix("## ") || l.isEmpty { break }
                 insertAt += 1
             }
-            var entry = "- [x] \(item.title)"
-            if let p = item.project { entry += " | project: \(p)" }
-            entry += " | effort: \(DurationParser.format(minutes: item.effortMinutes))"
-            lines.insert(entry, at: insertAt)
+            lines.insert(doneEntry(for: item), at: insertAt)
         } else {
             var insertAt = 0
             if let first = lines.first, first.hasPrefix("# ") {
@@ -269,14 +357,136 @@ final class ScheduleStore {
                     insertAt = 2
                 }
             }
-            var entry = "- [x] \(item.title)"
-            if let p = item.project { entry += " | project: \(p)" }
-            entry += " | effort: \(DurationParser.format(minutes: item.effortMinutes))"
-            lines.insert(contentsOf: [header, entry, ""], at: insertAt)
+            lines.insert(contentsOf: [header, doneEntry(for: item), ""], at: insertAt)
         }
 
         let content = lines.joined(separator: "\n")
         try? content.write(toFile: donePath, atomically: true, encoding: .utf8)
+    }
+
+    private func doneEntry(for item: TodoItem) -> String {
+        var entry = "- [x] \(item.title)"
+        if let p = item.project { entry += " | project: \(p)" }
+        entry += " | effort: \(DurationParser.format(minutes: item.effortMinutes))"
+        entry += " | at: \(Self.clockFormatter.string(from: Date()))"
+        return entry
+    }
+
+    /// Append a `> marker` line under today's header in done.md, creating the
+    /// header if needed. Used for ritual/audit markers (preflight, closed, …).
+    private func appendDayMarker(_ marker: String) {
+        let today = Self.dateFormatter.string(from: Date())
+        let header = "## \(today)"
+
+        var lines: [String] = []
+        if FileManager.default.fileExists(atPath: donePath) {
+            let content = (try? String(contentsOfFile: donePath, encoding: .utf8)) ?? ""
+            lines = content.components(separatedBy: .newlines)
+        }
+
+        if let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) {
+            var insertAt = headerIdx + 1
+            while insertAt < lines.count {
+                let l = lines[insertAt].trimmingCharacters(in: .whitespaces)
+                if l.hasPrefix("## ") || l.isEmpty { break }
+                insertAt += 1
+            }
+            lines.insert("> \(marker)", at: insertAt)
+        } else {
+            var insertAt = 0
+            if let first = lines.first, first.hasPrefix("# ") {
+                insertAt = 1
+                if insertAt < lines.count && lines[insertAt].isEmpty { insertAt = 2 }
+            }
+            lines.insert(contentsOf: [header, "> \(marker)", ""], at: insertAt)
+        }
+        try? lines.joined(separator: "\n").write(toFile: donePath, atomically: true, encoding: .utf8)
+    }
+
+    func markPreflight() {
+        appendDayMarker("preflight \(Self.clockFormatter.string(from: Date()))")
+        recompute()
+    }
+
+    private func readBriefing() -> String? {
+        guard let content = try? String(contentsOfFile: briefingPath, encoding: .utf8) else { return nil }
+        var lines = content.components(separatedBy: .newlines)
+        guard let first = lines.first else { return nil }
+        let today = Self.dateFormatter.string(from: Date())
+        guard first.hasPrefix("# Briefing"), first.contains(today) else { return nil }
+        lines.removeFirst()
+        let body = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return body.isEmpty ? nil : body
+    }
+
+    // MARK: - Proposals
+
+    func acceptProposal(_ item: TodoItem) {
+        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
+        rawTodoLines[item.lineIndex] = rawTodoLines[item.lineIndex]
+            .replacingOccurrences(of: "- [?] ", with: "- [ ] ")
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
+    }
+
+    func rejectProposal(_ item: TodoItem) {
+        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
+        let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
+        rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        appendDayMarker("rejected: \(item.title)")
+        recompute()
+    }
+
+    private var todayDoneDay: DoneDay? {
+        let today = Self.dateFormatter.string(from: Date())
+        return doneLog.first { $0.date == today }
+    }
+
+    var preflightDoneToday: Bool { todayDoneDay?.preflight != nil }
+    var dayClosedToday: Bool { todayDoneDay?.closed != nil }
+
+    enum EndOfDayChoice {
+        case tomorrow, backlog, scrap
+    }
+
+    /// Post-flight: walk today's leftovers with a conscious choice per task,
+    /// then stamp the day closed. The anti-guilt-pile.
+    func closeDay(decisions: [UUID: EndOfDayChoice]) {
+        let shipped = queue.completedToday.count
+        var diverted = 0
+        var scrapped = 0
+        var scrapTitles: [String] = []
+        let tomorrowStr = Self.dateFormatter.string(from: Calendar.current.date(byAdding: .day, value: 1, to: Date())!)
+
+        // Descending lineIndex so removals never invalidate pending indexes.
+        for item in queue.today.sorted(by: { $0.lineIndex > $1.lineIndex }) {
+            switch decisions[item.id] ?? .tomorrow {
+            case .tomorrow:
+                var line = TodoParser.setToken(line: rawTodoLines[item.lineIndex], key: "defer", value: tomorrowStr)
+                line = TodoParser.setToken(line: line, key: "carried", value: String(item.carried + 1))
+                rawTodoLines[item.lineIndex] = line
+                diverted += 1
+            case .backlog:
+                let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
+                let block = Array(rawTodoLines[item.lineIndex..<(item.lineIndex + len)])
+                rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+                rawTodoLines.append(contentsOf: block)  // bottom of file = lowest tiebreak
+            case .scrap:
+                let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
+                rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+                scrapTitles.append(item.title)
+                scrapped += 1
+            }
+        }
+
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        for title in scrapTitles { appendDayMarker("scrapped: \(title)") }
+        appendDayMarker("closed \(Self.clockFormatter.string(from: Date())) | shipped: \(shipped) | diverted: \(diverted) | scrapped: \(scrapped)")
+        recompute()
     }
 
     private func removeFromDoneLog(_ item: TodoItem) {
@@ -369,42 +579,7 @@ final class ScheduleStore {
     private func parseDoneLog() -> [DoneDay] {
         guard FileManager.default.fileExists(atPath: donePath) else { return [] }
         guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return [] }
-
-        let lines = content.components(separatedBy: .newlines)
-        var days: [DoneDay] = []
-        var currentDate: String?
-        var currentEntries: [DoneEntry] = []
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("## ") {
-                if let date = currentDate {
-                    days.append(DoneDay(id: date, date: date, entries: currentEntries))
-                }
-                currentDate = String(trimmed.dropFirst(3))
-                currentEntries = []
-            } else if trimmed.hasPrefix("- [x] "), currentDate != nil {
-                let raw = String(trimmed.dropFirst(6))
-                let parts = raw.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
-                let title = parts[0]
-                var project: String?
-                var effort = ""
-                for part in parts.dropFirst() {
-                    let lower = part.lowercased()
-                    if lower.hasPrefix("project:") {
-                        project = part.dropFirst(8).trimmingCharacters(in: .whitespaces)
-                    } else if lower.hasPrefix("effort:") {
-                        effort = part.dropFirst(7).trimmingCharacters(in: .whitespaces)
-                    }
-                }
-                currentEntries.append(DoneEntry(title: title, project: project, effort: effort))
-            }
-        }
-        if let date = currentDate {
-            days.append(DoneDay(id: date, date: date, entries: currentEntries))
-        }
-
-        return days
+        return DoneLogParser.parse(content: content)
     }
 
     // MARK: - Private
@@ -412,6 +587,7 @@ final class ScheduleStore {
     private func writeBack() {
         let content = rawTodoLines.joined(separator: "\n")
         try? content.write(toFile: todosPath, atomically: true, encoding: .utf8)
+        git.commitSoon("app: update todos")
     }
 
     private func setupFileWatcher() {
@@ -420,7 +596,9 @@ final class ScheduleStore {
         let paths = [todosPath, memoryPath].filter { FileManager.default.fileExists(atPath: $0) }
         fileWatcher = FileWatcher(filePaths: paths) { [weak self] in
             Task { @MainActor in
-                self?.recompute()
+                guard let self else { return }
+                self.recompute()
+                self.git.commitSoon("external edit (claude/mcp or manual)")
             }
         }
     }

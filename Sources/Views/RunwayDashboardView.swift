@@ -8,7 +8,7 @@ struct RunwayDashboardView: View {
     private var activeProjects: Int {
         Set((store.queue.today + store.queue.tomorrow + store.queue.backlog).compactMap { $0.project }).count
     }
-    private var streak: Int { computeStreak(from: store.doneLog) }
+    private var streak: Int { RitualStreak.compute(days: store.doneLog) }
 
     var body: some View {
         ZStack {
@@ -72,9 +72,9 @@ struct RunwayDashboardView: View {
             StatCardView(
                 icon: "flame.fill",
                 value: "\(streak)",
-                label: "Day streak",
+                label: "Flight days",
                 accent: .orange,
-                sublabel: streak == 0 ? "Ship something today" : "Keep it alive"
+                sublabel: streak == 0 ? "Close a day to start" : "Plan it, fly it, close it"
             )
             StatCardView(
                 icon: "tag.fill",
@@ -111,7 +111,6 @@ struct RunwayDashboardView: View {
                         emptyText: "Nothing shipped yet",
                         maxHeight: 220
                     )
-                    .opacity(0.85)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -123,6 +122,7 @@ struct RunwayDashboardView: View {
                     accent: .blue,
                     items: $store.queue.tomorrow,
                     store: store,
+                    section: .tomorrow,
                     subtitle: DurationParser.format(minutes: store.queue.tomorrowEffort),
                     emptyText: "Tomorrow is open",
                     maxHeight: 280
@@ -134,6 +134,7 @@ struct RunwayDashboardView: View {
                     accent: .orange,
                     items: $store.queue.backlog,
                     store: store,
+                    section: .backlog,
                     subtitle: "\(store.queue.backlog.count) waiting",
                     emptyText: "Backlog is empty",
                     maxHeight: 360
@@ -147,42 +148,20 @@ struct RunwayDashboardView: View {
         HStack(spacing: 12) {
             AddTaskView(store: store, compact: false)
 
-            Button(action: { store.recompute() }) {
-                Label("Reschedule", systemImage: "arrow.clockwise")
+            if let s = store.lastGoAround {
+                Text("\(s.kept) kept · \(s.diverted) diverted")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            Button(action: { store.goAround() }) {
+                Label("Go-Around", systemImage: "arrow.uturn.up")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .help("Repack what's left of today from now; divert the rest to tomorrow (⌃⌥G)")
         }
     }
 
-    private func computeStreak(from log: [DoneDay]) -> Int {
-        guard !log.isEmpty else { return 0 }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-
-        let datesWithEntries: Set<Date> = Set(log.compactMap { day in
-            day.entries.isEmpty ? nil : formatter.date(from: day.date)
-        })
-
-        guard !datesWithEntries.isEmpty else { return 0 }
-
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        var cursor = today
-        var streak = 0
-
-        if !datesWithEntries.contains(where: { calendar.isDate($0, inSameDayAs: today) }) {
-            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today) else { return 0 }
-            cursor = yesterday
-        }
-
-        while datesWithEntries.contains(where: { calendar.isDate($0, inSameDayAs: cursor) }) {
-            streak += 1
-            guard let prev = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = prev
-        }
-
-        return streak
-    }
 }

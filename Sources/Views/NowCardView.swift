@@ -40,10 +40,11 @@ struct NowCardView: View {
     private var hour: Int { Calendar.current.component(.hour, from: now) }
 
     private var energy: EnergyMode {
+        let blocks = store.context.energy
         switch hour {
-        case 5..<12: return .deepWork
-        case 12..<17: return .lighter
-        case 17..<22: return .admin
+        case blocks.deepWorkStart..<blocks.deepWorkEnd: return .deepWork
+        case blocks.deepWorkEnd..<blocks.lightEnd: return .lighter
+        case blocks.lightEnd..<blocks.adminEnd: return .admin
         default: return .rest
         }
     }
@@ -117,6 +118,7 @@ struct NowCardView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .help(task.rationale ?? "")
                 metaRow(for: task)
             }
         } else {
@@ -162,9 +164,20 @@ struct NowCardView: View {
             stat(value: "\(store.completedTodayCount)/\(store.totalTodayCount)", label: "done")
             divider
             stat(value: DurationParser.format(minutes: minutesLeft), label: "left")
+            if minutesLeft > 0 {
+                divider
+                stat(value: Self.etaFormatter.string(from: store.wheelsDownDate), label: "wheels down")
+                    .foregroundStyle(store.cautionActive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+            }
             Spacer()
         }
     }
+
+    private static let etaFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "H:mm"
+        return f
+    }()
 
     private func stat(value: String, label: String) -> some View {
         HStack(spacing: 4) {

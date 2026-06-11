@@ -3,12 +3,15 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var store: ScheduleStore
     @State private var capacityText: String = ""
+    @AppStorage("hudMode") private var hudMode: String = "compact"
+    @AppStorage("autoGitEnabled") private var autoGitEnabled: Bool = true
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 capacityCard
+                hudCard
                 filesCard
                 aboutCard
             }
@@ -79,12 +82,49 @@ struct SettingsView: View {
         }
     }
 
+    private var hudCard: some View {
+        card(icon: "gauge.open.with.lines.needle.33percent", accent: .indigo, title: "Menubar HUD", subtitle: "What the menubar shows at a glance") {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("", selection: $hudMode) {
+                    Text("Icon only").tag("icon")
+                    Text("Time left").tag("compact")
+                    Text("Task + time").tag("full")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 320)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Text("Warning triangle = master caution: the plan no longer fits the day.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     private var filesCard: some View {
         card(icon: "folder.fill", accent: .orange, title: "Files", subtitle: "DayPilot reads & writes plain markdown") {
             VStack(alignment: .leading, spacing: 10) {
                 fileRow(name: "todos.md", description: "Your task list")
                 fileRow(name: "memory.md", description: "Projects, priorities, capacity")
                 fileRow(name: "done.md", description: "Completion log")
+
+                Toggle(isOn: $autoGitEnabled) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Auto-commit changes to git")
+                            .font(.system(size: 12))
+                        Text("Every change becomes a diff — Claude included.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .padding(.top, 4)
 
                 Button {
                     let path = NSHomeDirectory() + "/scheduler"
@@ -98,8 +138,12 @@ struct SettingsView: View {
         }
     }
 
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    }
+
     private var aboutCard: some View {
-        card(icon: "paperplane.fill", accent: .accentColor, title: "About", subtitle: "DayPilot v1.1.0 — by Pilot AI") {
+        card(icon: "paperplane.fill", accent: .accentColor, title: "About", subtitle: "DayPilot v\(appVersion) — by Pilot AI") {
             HStack(spacing: 6) {
                 Text("Built native in SwiftUI.")
                     .font(.system(size: 12))

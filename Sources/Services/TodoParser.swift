@@ -49,6 +49,26 @@ enum TodoParser {
         return items
     }
 
+    /// Agent-proposed tasks (`- [?] `), awaiting human accept/reject.
+    static func proposals(lines: [String]) -> [TodoItem] {
+        var items: [TodoItem] = []
+        var i = 0
+        while i < lines.count {
+            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("- [?] ") {
+                let content = String(trimmed.dropFirst(6))
+                var item = parseFields(content, lineIndex: i, completed: false)
+                item.isProposed = true
+                i += 1
+                item.notes = collectNotes(lines: lines, from: &i)
+                items.append(item)
+            } else {
+                i += 1
+            }
+        }
+        return items
+    }
+
     /// Collect indented lines following a task as notes
     private static func collectNotes(lines: [String], from i: inout Int) -> [String] {
         var notes: [String] = []
@@ -59,7 +79,8 @@ enum TodoParser {
             guard !line.isEmpty,
                   (line.hasPrefix("  ") || line.hasPrefix("\t")),
                   !trimmed.hasPrefix("- [ ] "),
-                  !trimmed.hasPrefix("- [x] ") else {
+                  !trimmed.hasPrefix("- [x] "),
+                  !trimmed.hasPrefix("- [?] ") else {
                 break
             }
             notes.append(trimmed)
@@ -74,6 +95,9 @@ enum TodoParser {
         var project: String?
         var effort = 15
         var deadline: Date?
+        var deferUntil: Date?
+        var carried = 0
+        var addedBy: String?
 
         for part in parts.dropFirst() {
             let lower = part.lowercased()
@@ -85,6 +109,14 @@ enum TodoParser {
             } else if lower.hasPrefix("deadline:") {
                 let val = part.dropFirst(9).trimmingCharacters(in: .whitespaces)
                 deadline = dateFormatter.date(from: val)
+            } else if lower.hasPrefix("defer:") {
+                let val = part.dropFirst(6).trimmingCharacters(in: .whitespaces)
+                deferUntil = dateFormatter.date(from: val)
+            } else if lower.hasPrefix("carried:") {
+                let val = part.dropFirst(8).trimmingCharacters(in: .whitespaces)
+                carried = Int(val) ?? 0
+            } else if lower.hasPrefix("by:") {
+                addedBy = part.dropFirst(3).trimmingCharacters(in: .whitespaces)
             }
         }
 
@@ -94,8 +126,42 @@ enum TodoParser {
             effortMinutes: effort,
             deadline: deadline,
             isCompleted: completed,
-            lineIndex: lineIndex
+            lineIndex: lineIndex,
+            deferUntil: deferUntil,
+            carried: carried,
+            addedBy: addedBy
         )
+    }
+
+    /// Set, replace, or (with nil) remove a `key: value` token on a task line.
+    /// The checkbox + title segment is left untouched.
+    static func setToken(line: String, key: String, value: String?) -> String {
+        var parts = line.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let prefix = "\(key.lowercased()):"
+        parts.removeAll { $0.lowercased().hasPrefix(prefix) }
+        if let value { parts.append("\(key): \(value)") }
+        return parts.joined(separator: " | ")
+    }
+
+    /// Number of indented note lines following the task at `lineIndex`.
+    static func noteLineCount(lines: [String], at lineIndex: Int) -> Int {
+        var count = 0
+        var j = lineIndex + 1
+        while j < lines.count {
+            let line = lines[j]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty,
+                  (line.hasPrefix("  ") || line.hasPrefix("\t")),
+                  !trimmed.hasPrefix("- [ ] "),
+                  !trimmed.hasPrefix("- [x] "),
+                  !trimmed.hasPrefix("- [?] ") else {
+                break
+            }
+            count += 1
+            j += 1
+        }
+        return count
     }
 
     static func markComplete(lines: inout [String], at lineIndex: Int) {

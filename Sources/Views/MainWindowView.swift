@@ -105,11 +105,12 @@ struct MainWindowView: View {
             updateBadge
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.green)
+                    .fill(store.errorMessage == nil ? Color.green : Color.red)
                     .frame(width: 6, height: 6)
-                Text("Connected")
+                Text(store.errorMessage == nil ? "Watching files" : "File error")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .help(store.errorMessage ?? "todos.md and memory.md update live")
             }
             Text("~/scheduler/  •  v\(updateChecker.currentVersion)")
                 .font(.system(size: 9, design: .monospaced))

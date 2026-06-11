@@ -63,3 +63,40 @@ struct TodoParserTests {
         #expect(lines[1] == "- [ ] New task | project: Test | effort: 45m")
     }
 }
+
+@Suite("TodoParser v2 tokens")
+struct TodoParserTokenTests {
+    @Test func parsesNewTokens() {
+        let items = TodoParser.parse(lines: ["- [ ] T | project: X | defer: 2026-06-12 | carried: 2 | by: claude"])
+        #expect(items.count == 1)
+        #expect(items[0].carried == 2)
+        #expect(items[0].addedBy == "claude")
+        #expect(items[0].deferUntil != nil)
+    }
+
+    @Test func setTokenReplacesAndRemoves() {
+        let line = "- [ ] T | effort: 30m | carried: 1"
+        let bumped = TodoParser.setToken(line: line, key: "carried", value: "2")
+        #expect(bumped.contains("carried: 2"))
+        #expect(!bumped.contains("carried: 1"))
+        #expect(bumped.contains("effort: 30m"))
+        #expect(bumped.hasPrefix("- [ ] T"))
+        let removed = TodoParser.setToken(line: bumped, key: "carried", value: nil)
+        #expect(!removed.contains("carried:"))
+    }
+
+    @Test func proposedTasksParseSeparately() {
+        let lines = ["- [?] Maybe | project: X", "- [ ] Real"]
+        #expect(TodoParser.parse(lines: lines).map(\.title) == ["Real"])
+        let proposals = TodoParser.proposals(lines: lines)
+        #expect(proposals.map(\.title) == ["Maybe"])
+        #expect(proposals[0].isProposed)
+    }
+
+    @Test func proposedNotesDoNotLeakToPreviousTask() {
+        let lines = ["- [ ] Real", "- [?] Maybe", "  a proposal note"]
+        let real = TodoParser.parse(lines: lines)
+        #expect(real[0].notes.isEmpty)
+        #expect(TodoParser.proposals(lines: lines)[0].notes == ["a proposal note"])
+    }
+}

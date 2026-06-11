@@ -16,16 +16,16 @@ struct TaskRowView: View {
 
     private func triggerComplete() {
         guard !flying else { return }
-        withAnimation(.easeOut(duration: 0.18)) {
+        withAnimation(.easeOut(duration: 0.12)) {
             planeVisible = true
         }
-        withAnimation(.easeIn(duration: 1.4)) {
+        withAnimation(.easeIn(duration: 0.7)) {
             flying = true
         }
-        withAnimation(.easeIn(duration: 0.8).delay(0.5)) {
+        withAnimation(.easeIn(duration: 0.4).delay(0.25)) {
             titleHidden = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.45) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             onComplete()
         }
     }
@@ -96,16 +96,38 @@ struct TaskRowView: View {
                     .disabled(flying)
                     .opacity(titleHidden ? 0 : 1)
                     .offset(x: flying ? 760 : 0)
+                    .help(item.rationale ?? "")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                if item.addedBy == "claude" {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.indigo)
+                        .opacity(liftoff ? 0 : 1)
+                        .help("Added by Claude" + (item.notes.first.map { " — \($0)" } ?? ""))
+                }
+
+                if item.carried >= 3 {
+                    Label("\(item.carried)", systemImage: "arrow.uturn.right.circle")
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.orange.opacity(0.18))
+                        .foregroundStyle(.orange)
+                        .clipShape(Capsule())
+                        .fixedSize()
+                        .opacity(liftoff ? 0 : 1)
+                        .help("Carried \(item.carried) days — still worth hauling?")
+                }
 
                 if let project = item.project {
                     Text(project)
                         .font(.system(size: 9, weight: .semibold))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1.5)
-                        .background(pillColor(for: project).opacity(0.18))
-                        .foregroundStyle(pillColor(for: project))
+                        .background(ProjectColor.color(for: project).opacity(0.18))
+                        .foregroundStyle(ProjectColor.color(for: project))
                         .clipShape(Capsule())
                         .fixedSize()
                         .opacity(liftoff ? 0 : 1)
@@ -154,9 +176,4 @@ struct TaskRowView: View {
         .padding(.vertical, 4)
     }
 
-    private func pillColor(for name: String) -> Color {
-        let colors: [Color] = [.blue, .purple, .orange, .pink, .teal, .indigo, .mint, .brown]
-        let hash = abs(name.hashValue)
-        return colors[hash % colors.count]
-    }
 }

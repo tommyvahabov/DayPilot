@@ -67,10 +67,139 @@ struct SchedulerTests {
         #expect(queue.backlog.count == 1)
     }
 
+    @Test func tieBreakIsFileOrder() {
+        let todos = [
+            TodoItem(title: "Big first", project: "Alpha", effortMinutes: 45, lineIndex: 1),
+            TodoItem(title: "Small second", project: "Alpha", effortMinutes: 15, lineIndex: 2),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.map(\.title) == ["Big first", "Small second"])
+    }
+
     @Test func emptyTodosReturnsEmptyQueue() {
         let queue = Scheduler.schedule(todos: [], context: context)
         #expect(queue.today.isEmpty)
         #expect(queue.tomorrow.isEmpty)
         #expect(queue.backlog.isEmpty)
+    }
+
+    // MARK: Defer
+
+    @Test func deferredToTomorrowLandsInTomorrow() {
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let todos = [
+            TodoItem(title: "Now", project: "Alpha", effortMinutes: 15, lineIndex: 1),
+            TodoItem(title: "Deferred", project: "Alpha", effortMinutes: 15, lineIndex: 2, deferUntil: tomorrow),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.map(\.title) == ["Now"])
+        #expect(queue.tomorrow.map(\.title) == ["Deferred"])
+    }
+
+    @Test func deferredFurtherOutLandsInBacklog() {
+        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: Date())!
+        let todos = [
+            TodoItem(title: "Someday", project: "Alpha", effortMinutes: 15, lineIndex: 1, deferUntil: nextWeek),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.isEmpty)
+        #expect(queue.backlog.map(\.title) == ["Someday"])
+    }
+
+    @Test func pastDeferIsIgnored() {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let todos = [
+            TodoItem(title: "Was snoozed", project: "Alpha", effortMinutes: 15, lineIndex: 1, deferUntil: yesterday),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.map(\.title) == ["Was snoozed"])
+    }
+
+    // MARK: Flight math
+
+    private func date(hour: Int, minute: Int = 0) -> Date {
+        Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: Date())!
+    }
+
+    @Test func noCautionWhenPlanFits() {
+        // 10:00, 2h remaining, capacity 6h, nothing done → lands 12:00, well clear
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        #expect(!Scheduler.cautionActive(now: date(hour: 10), remainingMinutes: 120, minutesDoneToday: 0, context: ctx))
+    }
+
+    @Test func cautionWhenOverrunningAdminEnd() {
+        // 20:00 with 3h remaining → wheels down 23:00, past adminEnd 22:00
+        let ctx = MemoryContext(dailyCapacityMinutes: 600)
+        #expect(Scheduler.cautionActive(now: date(hour: 20), remainingMinutes: 180, minutesDoneToday: 0, context: ctx))
+    }
+
+    @Test func cautionWhenOverCapacity() {
+        // 9:00, 5h remaining but only 4h capacity left (6h cap, 2h done)
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        #expect(Scheduler.cautionActive(now: date(hour: 9), remainingMinutes: 300, minutesDoneToday: 120, context: ctx))
+    }
+
+    @Test func wheelsDownAddsRemaining() {
+        let now = date(hour: 14)
+        let eta = Scheduler.wheelsDown(now: now, remainingMinutes: 90)
+        #expect(eta == now.addingTimeInterval(90 * 60))
+    }
+
+    // MARK: Calibration
+
+    @Test func calibrationInflatesPackingEffort() {
+        // Two 30m tasks at ×1.5 = 45m effective each; 60m capacity fits only one.
+        let ctx = MemoryContext(dailyCapacityMinutes: 60, calibration: ["alpha": 1.5])
+        let todos = [
+            TodoItem(title: "First", project: "Alpha", effortMinutes: 30, lineIndex: 1),
+            TodoItem(title: "Second", project: "Alpha", effortMinutes: 30, lineIndex: 2),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: ctx)
+        #expect(queue.today.map(\.title) == ["First"])
+        #expect(queue.tomorrow.map(\.title) == ["Second"])
+    }
+
+    @Test func scheduledItemsCarryRationale() {
+        let queue = Scheduler.schedule(
+            todos: [TodoItem(title: "T", project: "Alpha", effortMinutes: 30, lineIndex: 1)],
+            context: context
+        )
+        #expect(queue.today[0].rationale?.contains("today") == true)
+    }
+
+    // MARK: Reflow (Go-Around)
+
+    @Test func reflowKeepsWhatFitsAndDivertsTheRest() {
+        // 14:00, capacity 6h, 2h done → available = min(8h until 22:00, 4h) = 4h
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        let todos = [
+            TodoItem(title: "A", effortMinutes: 120, lineIndex: 1),
+            TodoItem(title: "B", effortMinutes: 120, lineIndex: 2),
+            TodoItem(title: "C", effortMinutes: 60, lineIndex: 3),
+        ]
+        let result = Scheduler.reflow(todos: todos, context: ctx, now: date(hour: 14), minutesDoneToday: 120)
+        #expect(result.kept.map(\.title) == ["A", "B"])
+        #expect(result.diverted.map(\.title) == ["C"])
+    }
+
+    @Test func reflowIgnoresAlreadyDeferredTasks() {
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let todos = [
+            TodoItem(title: "Live", effortMinutes: 60, lineIndex: 1),
+            TodoItem(title: "Snoozed", effortMinutes: 60, lineIndex: 2, deferUntil: tomorrow),
+        ]
+        let result = Scheduler.reflow(todos: todos, context: ctx, now: date(hour: 10), minutesDoneToday: 0)
+        #expect(result.kept.map(\.title) == ["Live"])
+        #expect(result.diverted.isEmpty)
+    }
+
+    @Test func reflowLateEveningDivertsEverything() {
+        // 21:30 → only 30m until adminEnd; a 60m task can't land
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        let todos = [TodoItem(title: "Too big", effortMinutes: 60, lineIndex: 1)]
+        let result = Scheduler.reflow(todos: todos, context: ctx, now: date(hour: 21, minute: 30), minutesDoneToday: 0)
+        #expect(result.kept.isEmpty)
+        #expect(result.diverted.map(\.title) == ["Too big"])
     }
 }

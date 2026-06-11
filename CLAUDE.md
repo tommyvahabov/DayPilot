@@ -57,8 +57,39 @@ Completed:
 - Auto-refresh: watch files for changes, update popover live
 
 ## What NOT to build
-- No AI integration
+- No in-app AI API calls (intelligence comes from Claude via the MCP server;
+  the app itself stays deterministic and offline)
 - No cloud sync
 - No accounts
 - No onboarding
-- No settings screen (keep it simple)
+- No notifications (the menubar HUD is the only signal)
+
+## Claude ↔ DayPilot conventions (v2 "Flight Deck")
+
+The app's scheduler is deterministic Swift; Claude supplies judgment through the
+markdown files via the daypilot MCP tools. The contract:
+
+- **Proposals, not surprises.** Anything speculative goes in as `proposed: true`
+  (a `- [?]` line). Tommy accepts/rejects in the app. Only add `- [ ]` tasks
+  directly when he explicitly asked for that exact task.
+- **Provenance.** MCP-added tasks are tagged `by: claude` automatically; put the
+  why in the task's notes.
+- **Defer, don't delete.** `defer: YYYY-MM-DD` snoozes a task. `carried: N`
+  counts rollovers — when you see N ≥ 3 in list_tasks, ask whether it's still
+  worth hauling.
+- **Calibration loop.** done.md entries carry `at: HH:mm` timestamps. Periodically
+  compare estimates vs actual completion patterns per project and write a
+  `## Calibration` section to memory.md (`- ProjectName: 1.8`). The scheduler
+  multiplies efforts by it for packing and the wheels-down ETA.
+- **Morning briefing.** When asked (or in a morning routine), use `write_briefing`
+  — 3-6 lines: today's shape, the one thing that matters, any overweight warning.
+  Rendered at the top of the app until midnight.
+- **Negotiated overload.** When the day doesn't fit (payload > capacity), never
+  silently rewrite todos.md. Present 2-3 named trade-off bundles in conversation
+  ("drop X / shrink Y / push Z") and apply only what Tommy picks.
+- **Memory ratification.** Propose memory.md edits (energy pattern, priorities)
+  in conversation before writing them — the user model is jointly owned.
+- **Energy blocks** are configurable in memory.md `## Settings`:
+  `deep_work: 9-12`, `light: 12-17`, `admin: 17-22`.
+- `~/scheduler` is auto-committed to a local git repo by the app; history is
+  readable context ("what changed last week and did it help?").

@@ -3,8 +3,12 @@ import SwiftUI
 struct TodayView: View {
     @Bindable var store: ScheduleStore
 
+    // The flip is delightful exactly once — replaying it on every tab switch got old.
+    private static var greetingShownThisLaunch = false
+
     @State private var greeting: Greeting = Greeting.pick()
-    @State private var showGreeting: Bool = true
+    @State private var showGreeting: Bool = !TodayView.greetingShownThisLaunch
+    @State private var showPostflight = false
 
     private var today: Date { Date() }
 
@@ -26,6 +30,12 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+
+                PreflightCardView(store: store)
+
+                BriefingCardView(store: store)
+
+                ProposalsView(store: store)
 
                 SectionCardView(
                     title: "Today",
@@ -49,7 +59,6 @@ struct TodayView: View {
                         emptyText: "Nothing shipped yet",
                         maxHeight: nil
                     )
-                    .opacity(0.85)
                 }
             }
             .padding(24)
@@ -57,6 +66,9 @@ struct TodayView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(.background)
+        .sheet(isPresented: $showPostflight) {
+            PostflightView(store: store)
+        }
     }
 
     private var header: some View {
@@ -84,6 +96,8 @@ struct TodayView: View {
         .frame(height: 78, alignment: .topLeading)
         .clipped()
         .onAppear {
+            guard showGreeting else { return }
+            Self.greetingShownThisLaunch = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 withAnimation(.timingCurve(0.65, 0.05, 0.36, 1, duration: 0.7)) {
                     showGreeting = false
@@ -111,16 +125,33 @@ struct TodayView: View {
     }
 
     private var dateHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("TODAY")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.4)
-                .foregroundStyle(.tertiary)
-            Text(Self.dayFormatter.string(from: today))
-                .font(.system(size: 28, weight: .bold))
-            Text(progressLine)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("TODAY")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(.tertiary)
+                Text(Self.dayFormatter.string(from: today))
+                    .font(.system(size: 28, weight: .bold))
+                Text(progressLine)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if store.dayClosedToday {
+                Label("Flight closed", systemImage: "airplane.arrival")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Button {
+                    showPostflight = true
+                } label: {
+                    Label("Close the day", systemImage: "airplane.arrival")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
         }
     }
 

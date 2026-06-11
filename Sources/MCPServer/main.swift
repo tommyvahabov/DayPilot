@@ -24,7 +24,7 @@ func isNoteLine(_ line: String) -> Bool {
     if line.isEmpty { return false }
     let trimmed = line.trimmingCharacters(in: .whitespaces)
     let startsIndent = line.hasPrefix("  ") || line.hasPrefix("\t")
-    return startsIndent && !trimmed.hasPrefix("- [ ] ") && !trimmed.hasPrefix("- [x] ")
+    return startsIndent && !trimmed.hasPrefix("- [ ] ") && !trimmed.hasPrefix("- [x] ") && !trimmed.hasPrefix("- [?] ")
 }
 
 func collectNotes(_ lines: [String], at idx: Int) -> [String] {
@@ -75,6 +75,11 @@ func toolListTasks() -> [String: Any] {
             let notes = collectNotes(lines, at: i)
             tasks.append(["line": i, "status": "done", "raw": raw, "notes": notes])
             i += notes.count + 1
+        } else if trimmed.hasPrefix("- [?] ") {
+            let raw = String(trimmed.dropFirst(6))
+            let notes = collectNotes(lines, at: i)
+            tasks.append(["line": i, "status": "proposed", "raw": raw, "notes": notes])
+            i += notes.count + 1
         } else {
             i += 1
         }
@@ -90,10 +95,13 @@ func toolAddTask(_ args: [String: Any]) -> [String: Any] {
     ensureDir()
     var lines = readLines(TODOS_PATH)
     if lines.isEmpty { lines = ["# Todos", ""] }
-    var task = "- [ ] \(title)"
+    let proposed = (args["proposed"] as? Bool) ?? false
+    var task = proposed ? "- [?] \(title)" : "- [ ] \(title)"
     if let p = args["project"] as? String, !p.isEmpty { task += " | project: \(p)" }
     if let e = args["effort"] as? String, !e.isEmpty { task += " | effort: \(e)" }
     if let d = args["deadline"] as? String, !d.isEmpty { task += " | deadline: \(d)" }
+    if let df = args["defer"] as? String, !df.isEmpty { task += " | defer: \(df)" }
+    task += " | by: claude"
     lines.append(task)
     var noteCount = 0
     if let notes = args["notes"] as? [String] {
@@ -268,15 +276,30 @@ func toolSetProject(_ args: [String: Any]) -> [String: Any] {
     return textContent("Project \"\(name)\" set: priority \(priority)" + ((args["deadline"] as? String).map { ", deadline \($0)" } ?? ""))
 }
 
+func toolWriteBriefing(_ args: [String: Any]) -> [String: Any] {
+    guard let content = args["content"] as? String, !content.isEmpty else {
+        return textContent("Error: content is required")
+    }
+    ensureDir()
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    let today = formatter.string(from: Date())
+    let body = "# Briefing — \(today)\n\n\(content)\n"
+    try? body.write(toFile: "\(SCHEDULER_DIR)/briefing.md", atomically: true, encoding: .utf8)
+    return textContent("Briefing written for \(today)")
+}
+
 // MARK: - done.md logging
 func logDone(_ rawTask: String) {
     ensureDir()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     let today = formatter.string(from: Date())
+    let clock = DateFormatter()
+    clock.dateFormat = "HH:mm"
     let header = "## \(today)"
     var lines = readLines(DONE_PATH)
-    let entry = "- [x] \(rawTask)"
+    let entry = "- [x] \(rawTask) | at: \(clock.string(from: Date()))"
     if let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) {
         var insertAt = headerIdx + 1
         while insertAt < lines.count {
@@ -315,7 +338,7 @@ let tools: [ToolSpec] = [
     ),
     ToolSpec(
         name: "add_task",
-        description: "Add a new task to ~/scheduler/todos.md. Fields: title (required), project, effort (e.g. '30m', '1h'), deadline (YYYY-MM-DD), notes (array of strings)",
+        description: "Add a new task to ~/scheduler/todos.md (tagged 'by: claude'). Fields: title (required), project, effort (e.g. '30m', '1h'), deadline (YYYY-MM-DD), defer (YYYY-MM-DD — don't schedule before this date), proposed (bool — add as a [?] proposal the human accepts/rejects in DayPilot; use for anything speculative), notes (array of strings)",
         schema: [
             "type": "object",
             "properties": [
@@ -323,6 +346,8 @@ let tools: [ToolSpec] = [
                 "project": ["type": "string", "description": "Project name"],
                 "effort": ["type": "string", "description": "Effort estimate, e.g. '30m', '1h', '1h30m'"],
                 "deadline": ["type": "string", "description": "Deadline in YYYY-MM-DD format"],
+                "defer": ["type": "string", "description": "Don't schedule before this date (YYYY-MM-DD)"],
+                "proposed": ["type": "boolean", "description": "Add as a proposal ([?]) for human review instead of a real task"],
                 "notes": ["type": "array", "items": ["type": "string"], "description": "Task notes, each string is a line"],
             ],
             "required": ["title"],
@@ -405,6 +430,16 @@ let tools: [ToolSpec] = [
         handler: toolSetCapacity
     ),
     ToolSpec(
+        name: "write_briefing",
+        description: "Write today's morning briefing to ~/scheduler/briefing.md. DayPilot renders it at the top of the day views (only while dated today). Keep it short: 3-6 lines of markdown.",
+        schema: [
+            "type": "object",
+            "properties": ["content": ["type": "string", "description": "Briefing body (markdown)"]],
+            "required": ["content"],
+        ],
+        handler: toolWriteBriefing
+    ),
+    ToolSpec(
         name: "set_project",
         description: "Add or update a project in memory.md",
         schema: [
@@ -445,7 +480,7 @@ func handleMessage(_ msg: [String: Any]) {
         sendResponse(id, result: [
             "protocolVersion": "2024-11-05",
             "capabilities": ["tools": [:] as [String: Any]],
-            "serverInfo": ["name": "daypilot", "version": "1.0.0"],
+            "serverInfo": ["name": "daypilot", "version": "1.1.0"],
         ])
     case "notifications/initialized":
         return

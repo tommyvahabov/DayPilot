@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared task list content used by both popover and window.
+/// Shared task list content used by the popover.
 struct ScheduleContentView: View {
     @Bindable var store: ScheduleStore
     var compact: Bool = true
@@ -8,7 +8,7 @@ struct ScheduleContentView: View {
     var body: some View {
         if let error = store.errorMessage {
             VStack(spacing: 10) {
-                Image(systemName: "airplane.departure")
+                Image(systemName: "doc.questionmark")
                     .font(.system(size: 32))
                     .foregroundStyle(.tertiary)
                 Text(error)
@@ -16,43 +16,21 @@ struct ScheduleContentView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
+                Button {
+                    store.recompute()
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if compact {
-            compactLayout
         } else {
-            expandedLayout
-        }
-    }
-
-    private var compactLayout: some View {
-        List {
-            todaySection
-            completedSection
-            tomorrowSection
-            backlogSection
-        }
-        .listStyle(.plain)
-    }
-
-    private var expandedLayout: some View {
-        HStack(alignment: .top, spacing: 0) {
             List {
                 todaySection
                 completedSection
-            }
-            .listStyle(.plain)
-
-            Divider()
-
-            List {
                 tomorrowSection
-            }
-            .listStyle(.plain)
-
-            Divider()
-
-            List {
                 backlogSection
             }
             .listStyle(.plain)
@@ -85,7 +63,6 @@ struct ScheduleContentView: View {
                 collapsible: true,
                 compact: compact
             )
-            .opacity(0.6)
         }
     }
 
