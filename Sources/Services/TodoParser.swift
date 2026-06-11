@@ -98,6 +98,25 @@ enum TodoParser {
         )
     }
 
+    /// Number of indented note lines following the task at `lineIndex`.
+    static func noteLineCount(lines: [String], at lineIndex: Int) -> Int {
+        var count = 0
+        var j = lineIndex + 1
+        while j < lines.count {
+            let line = lines[j]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty,
+                  (line.hasPrefix("  ") || line.hasPrefix("\t")),
+                  !trimmed.hasPrefix("- [ ] "),
+                  !trimmed.hasPrefix("- [x] ") else {
+                break
+            }
+            count += 1
+            j += 1
+        }
+        return count
+    }
+
     static func markComplete(lines: inout [String], at lineIndex: Int) {
         guard lineIndex >= 0, lineIndex < lines.count else { return }
         lines[lineIndex] = lines[lineIndex].replacingOccurrences(of: "- [ ] ", with: "- [x] ")

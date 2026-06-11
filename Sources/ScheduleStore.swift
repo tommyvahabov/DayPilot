@@ -226,12 +226,37 @@ final class ScheduleStore {
         recompute()
     }
 
-    func moveTask(from source: IndexSet, to destination: Int, in section: Section) {
+    /// Persist a manual reorder by moving the task's line block (task + notes)
+    /// within todos.md. File order is the scheduler's tiebreak, so the new
+    /// order survives recomputes and restarts.
+    func moveTask(id: UUID, toIndex: Int, in section: Section) {
+        let items: [TodoItem]
         switch section {
-        case .today: queue.today.move(fromOffsets: source, toOffset: destination)
-        case .tomorrow: queue.tomorrow.move(fromOffsets: source, toOffset: destination)
-        case .backlog: queue.backlog.move(fromOffsets: source, toOffset: destination)
+        case .today: items = queue.today
+        case .tomorrow: items = queue.tomorrow
+        case .backlog: items = queue.backlog
         }
+        guard let fromIndex = items.firstIndex(where: { $0.id == id }),
+              fromIndex != toIndex, toIndex >= 0, toIndex < items.count else { return }
+
+        let moving = items[fromIndex]
+        let target = items[toIndex]
+        let blockLen = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: moving.lineIndex)
+        let block = Array(rawTodoLines[moving.lineIndex..<(moving.lineIndex + blockLen)])
+        rawTodoLines.removeSubrange(moving.lineIndex..<(moving.lineIndex + blockLen))
+
+        var targetLine = target.lineIndex
+        if targetLine > moving.lineIndex { targetLine -= blockLen }
+        let insertAt: Int
+        if fromIndex < toIndex {  // moving down → land after the target's block
+            insertAt = targetLine + 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: targetLine)
+        } else {                  // moving up → land before the target
+            insertAt = targetLine
+        }
+        rawTodoLines.insert(contentsOf: block, at: insertAt)
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
     }
 
     enum Section {

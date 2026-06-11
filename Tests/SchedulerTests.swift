@@ -67,6 +67,15 @@ struct SchedulerTests {
         #expect(queue.backlog.count == 1)
     }
 
+    @Test func tieBreakIsFileOrder() {
+        let todos = [
+            TodoItem(title: "Big first", project: "Alpha", effortMinutes: 45, lineIndex: 1),
+            TodoItem(title: "Small second", project: "Alpha", effortMinutes: 15, lineIndex: 2),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: context)
+        #expect(queue.today.map(\.title) == ["Big first", "Small second"])
+    }
+
     @Test func emptyTodosReturnsEmptyQueue() {
         let queue = Scheduler.schedule(todos: [], context: context)
         #expect(queue.today.isEmpty)

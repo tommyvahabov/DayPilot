@@ -123,6 +123,7 @@ struct RunwayDashboardView: View {
                     accent: .blue,
                     items: $store.queue.tomorrow,
                     store: store,
+                    section: .tomorrow,
                     subtitle: DurationParser.format(minutes: store.queue.tomorrowEffort),
                     emptyText: "Tomorrow is open",
                     maxHeight: 280
@@ -134,6 +135,7 @@ struct RunwayDashboardView: View {
                     accent: .orange,
                     items: $store.queue.backlog,
                     store: store,
+                    section: .backlog,
                     subtitle: "\(store.queue.backlog.count) waiting",
                     emptyText: "Backlog is empty",
                     maxHeight: 360

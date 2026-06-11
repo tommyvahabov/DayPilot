@@ -11,7 +11,9 @@ enum Scheduler {
             let bPriority = context.priority(for: b.project)
             if aPriority != bPriority { return aPriority < bPriority }
 
-            return a.effortMinutes < b.effortMinutes
+            // File order is the final tiebreak so manual reordering survives
+            // recomputes (effort used to win here, which stomped user intent).
+            return a.lineIndex < b.lineIndex
         }
 
         var today: [TodoItem] = []

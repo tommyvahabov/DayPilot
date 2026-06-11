@@ -6,6 +6,7 @@ struct SectionCardView: View {
     let accent: Color
     @Binding var items: [TodoItem]
     let store: ScheduleStore
+    var section: ScheduleStore.Section = .today
     var subtitle: String? = nil
     var emptyText: String = "Nothing here yet"
     var maxHeight: CGFloat? = nil
@@ -40,14 +41,12 @@ struct SectionCardView: View {
                             }
                             .dropDestination(for: String.self) { droppedIDs, _ in
                                 guard let droppedID = droppedIDs.first,
-                                      let fromIndex = items.firstIndex(where: { $0.id.uuidString == droppedID }) else {
+                                      let droppedUUID = UUID(uuidString: droppedID),
+                                      items.contains(where: { $0.id == droppedUUID }) else {
                                     return false
                                 }
-                                let toIndex = index
-                                if fromIndex != toIndex {
-                                    withAnimation {
-                                        items.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
-                                    }
+                                withAnimation {
+                                    store.moveTask(id: droppedUUID, toIndex: index, in: section)
                                 }
                                 return true
                             }
