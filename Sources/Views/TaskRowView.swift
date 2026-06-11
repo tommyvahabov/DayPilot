@@ -104,8 +104,8 @@ struct TaskRowView: View {
                         .font(.system(size: 9, weight: .semibold))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1.5)
-                        .background(pillColor(for: project).opacity(0.18))
-                        .foregroundStyle(pillColor(for: project))
+                        .background(ProjectColor.color(for: project).opacity(0.18))
+                        .foregroundStyle(ProjectColor.color(for: project))
                         .clipShape(Capsule())
                         .fixedSize()
                         .opacity(liftoff ? 0 : 1)
@@ -154,9 +154,4 @@ struct TaskRowView: View {
         .padding(.vertical, 4)
     }
 
-    private func pillColor(for name: String) -> Color {
-        let colors: [Color] = [.blue, .purple, .orange, .pink, .teal, .indigo, .mint, .brown]
-        let hash = abs(name.hashValue)
-        return colors[hash % colors.count]
-    }
 }
