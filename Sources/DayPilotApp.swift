@@ -80,7 +80,7 @@ struct DayPilotApp: App {
                     await updateChecker.check()
                 }
         }
-        .defaultSize(width: 800, height: 500)
+        .defaultSize(width: 980, height: 600)
         .windowResizability(.contentMinSize)
     }
 }

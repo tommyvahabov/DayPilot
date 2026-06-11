@@ -98,8 +98,12 @@ struct SettingsView: View {
         }
     }
 
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    }
+
     private var aboutCard: some View {
-        card(icon: "paperplane.fill", accent: .accentColor, title: "About", subtitle: "DayPilot v1.1.0 — by Pilot AI") {
+        card(icon: "paperplane.fill", accent: .accentColor, title: "About", subtitle: "DayPilot v\(appVersion) — by Pilot AI") {
             HStack(spacing: 6) {
                 Text("Built native in SwiftUI.")
                     .font(.system(size: 12))

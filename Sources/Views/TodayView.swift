@@ -3,8 +3,11 @@ import SwiftUI
 struct TodayView: View {
     @Bindable var store: ScheduleStore
 
+    // The flip is delightful exactly once — replaying it on every tab switch got old.
+    private static var greetingShownThisLaunch = false
+
     @State private var greeting: Greeting = Greeting.pick()
-    @State private var showGreeting: Bool = true
+    @State private var showGreeting: Bool = !TodayView.greetingShownThisLaunch
 
     private var today: Date { Date() }
 
@@ -49,7 +52,6 @@ struct TodayView: View {
                         emptyText: "Nothing shipped yet",
                         maxHeight: nil
                     )
-                    .opacity(0.85)
                 }
             }
             .padding(24)
@@ -84,6 +86,8 @@ struct TodayView: View {
         .frame(height: 78, alignment: .topLeading)
         .clipped()
         .onAppear {
+            guard showGreeting else { return }
+            Self.greetingShownThisLaunch = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 withAnimation(.timingCurve(0.65, 0.05, 0.36, 1, duration: 0.7)) {
                     showGreeting = false

@@ -111,7 +111,6 @@ struct RunwayDashboardView: View {
                         emptyText: "Nothing shipped yet",
                         maxHeight: 220
                     )
-                    .opacity(0.85)
                 }
             }
             .frame(maxWidth: .infinity)

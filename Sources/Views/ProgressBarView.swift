@@ -9,18 +9,17 @@ struct ProgressBarView: View {
         return min(Double(current) / Double(capacity), 1.0)
     }
 
+    // Completion semantics: finishing the day is a win, not an overload —
+    // green throughout (the old palette went red at 100%).
     private var color: Color {
-        let ratio = Double(current) / Double(max(capacity, 1))
-        if ratio >= 1.0 { return .red }
-        if ratio >= 0.8 { return .orange }
-        return .green
+        progress >= 1.0 ? .green : .green.opacity(0.9)
     }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(color.opacity(0.15))
+                    .fill(Color.primary.opacity(0.08))
 
                 RoundedRectangle(cornerRadius: 3)
                     .fill(color)

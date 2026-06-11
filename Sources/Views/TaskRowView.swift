@@ -16,16 +16,16 @@ struct TaskRowView: View {
 
     private func triggerComplete() {
         guard !flying else { return }
-        withAnimation(.easeOut(duration: 0.18)) {
+        withAnimation(.easeOut(duration: 0.12)) {
             planeVisible = true
         }
-        withAnimation(.easeIn(duration: 1.4)) {
+        withAnimation(.easeIn(duration: 0.7)) {
             flying = true
         }
-        withAnimation(.easeIn(duration: 0.8).delay(0.5)) {
+        withAnimation(.easeIn(duration: 0.4).delay(0.25)) {
             titleHidden = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.45) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             onComplete()
         }
     }
