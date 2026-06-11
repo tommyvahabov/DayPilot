@@ -57,11 +57,13 @@ Completed:
 - Auto-refresh: watch files for changes, update popover live
 
 ## What NOT to build
-- No AI integration
+- No in-app AI API calls (intelligence comes from Claude via the MCP server;
+  the app itself stays deterministic and offline)
 - No cloud sync
 - No accounts
 - No onboarding
-- No settings screen (keep it simple)
+- No notifications (the menubar HUD is the only signal)
+
 ## Claude ↔ DayPilot conventions (v2 "Flight Deck")
 
 The app's scheduler is deterministic Swift; Claude supplies judgment through the
