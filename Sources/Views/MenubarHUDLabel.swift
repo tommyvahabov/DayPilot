@@ -6,6 +6,7 @@ import SwiftUI
 struct MenubarHUDLabel: View {
     let store: ScheduleStore
     @AppStorage("hudMode") private var mode: String = "compact"
+    @State private var hotKey: HotKeyService?
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -29,7 +30,13 @@ struct MenubarHUDLabel: View {
                 }
             }
         }
-        .onAppear { store.start() }
+        .onAppear {
+            store.start()
+            if hotKey == nil {
+                let store = self.store
+                hotKey = HotKeyService { store.goAround() }
+            }
+        }
     }
 
     private var hudText: String? {
