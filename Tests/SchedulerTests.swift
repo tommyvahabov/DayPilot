@@ -82,4 +82,34 @@ struct SchedulerTests {
         #expect(queue.tomorrow.isEmpty)
         #expect(queue.backlog.isEmpty)
     }
+
+    // MARK: Flight math
+
+    private func date(hour: Int, minute: Int = 0) -> Date {
+        Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: Date())!
+    }
+
+    @Test func noCautionWhenPlanFits() {
+        // 10:00, 2h remaining, capacity 6h, nothing done → lands 12:00, well clear
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        #expect(!Scheduler.cautionActive(now: date(hour: 10), remainingMinutes: 120, minutesDoneToday: 0, context: ctx))
+    }
+
+    @Test func cautionWhenOverrunningAdminEnd() {
+        // 20:00 with 3h remaining → wheels down 23:00, past adminEnd 22:00
+        let ctx = MemoryContext(dailyCapacityMinutes: 600)
+        #expect(Scheduler.cautionActive(now: date(hour: 20), remainingMinutes: 180, minutesDoneToday: 0, context: ctx))
+    }
+
+    @Test func cautionWhenOverCapacity() {
+        // 9:00, 5h remaining but only 4h capacity left (6h cap, 2h done)
+        let ctx = MemoryContext(dailyCapacityMinutes: 360)
+        #expect(Scheduler.cautionActive(now: date(hour: 9), remainingMinutes: 300, minutesDoneToday: 120, context: ctx))
+    }
+
+    @Test func wheelsDownAddsRemaining() {
+        let now = date(hour: 14)
+        let eta = Scheduler.wheelsDown(now: now, remainingMinutes: 90)
+        #expect(eta == now.addingTimeInterval(90 * 60))
+    }
 }

@@ -37,4 +37,20 @@ enum Scheduler {
 
         return DayQueue(today: today, tomorrow: tomorrow, backlog: backlog)
     }
+
+    // MARK: - Flight math
+
+    static func wheelsDown(now: Date, remainingMinutes: Int) -> Date {
+        now.addingTimeInterval(TimeInterval(remainingMinutes * 60))
+    }
+
+    /// Master caution: the remaining plan overruns the end of the admin block,
+    /// or exceeds what's left of today's capacity.
+    static func cautionActive(now: Date, remainingMinutes: Int, minutesDoneToday: Int, context: MemoryContext) -> Bool {
+        let cal = Calendar.current
+        let endOfDay = cal.date(bySettingHour: context.energy.adminEnd, minute: 0, second: 0, of: now) ?? now
+        let overrunsDay = wheelsDown(now: now, remainingMinutes: remainingMinutes) > endOfDay
+        let overCapacity = remainingMinutes > max(0, context.dailyCapacityMinutes - minutesDoneToday)
+        return overrunsDay || overCapacity
+    }
 }

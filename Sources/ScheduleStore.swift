@@ -263,6 +263,29 @@ final class ScheduleStore {
         case today, tomorrow, backlog
     }
 
+    // MARK: - Flight math
+
+    var remainingTodayMinutes: Int {
+        queue.today.reduce(0) { $0 + $1.effortMinutes }
+    }
+
+    var minutesDoneToday: Int {
+        queue.completedToday.reduce(0) { $0 + $1.effortMinutes }
+    }
+
+    var wheelsDownDate: Date {
+        Scheduler.wheelsDown(now: Date(), remainingMinutes: remainingTodayMinutes)
+    }
+
+    var cautionActive: Bool {
+        !queue.today.isEmpty && Scheduler.cautionActive(
+            now: Date(),
+            remainingMinutes: remainingTodayMinutes,
+            minutesDoneToday: minutesDoneToday,
+            context: context
+        )
+    }
+
     // MARK: - Daily Summary
 
     private func logCompletion(_ item: TodoItem) {
