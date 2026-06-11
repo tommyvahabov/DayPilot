@@ -47,6 +47,10 @@ struct TaskSectionView: View {
                             store.uncompleteTask(item)
                         }, onNotesChanged: { notes in
                             store.updateNotes(for: item, notes: notes)
+                        }, onEdit: { title, project, effort, deadline in
+                            store.updateTask(item, title: title, project: project, effort: effort, deadline: deadline)
+                        }, onDelete: {
+                            store.removeTask(item)
                         })
                         .draggable(item.id.uuidString) {
                             Text(item.title)

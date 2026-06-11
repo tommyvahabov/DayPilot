@@ -100,3 +100,26 @@ struct TodoParserTokenTests {
         #expect(TodoParser.proposals(lines: lines)[0].notes == ["a proposal note"])
     }
 }
+
+@Suite("TodoParser editing")
+struct TodoParserEditTests {
+    @Test func setTitlePreservesCheckboxAndTokens() {
+        let line = "- [ ] Old name | project: X | carried: 2 | by: claude"
+        let edited = TodoParser.setTitle(line: line, title: "New name")
+        #expect(edited.hasPrefix("- [ ] New name"))
+        #expect(edited.contains("project: X"))
+        #expect(edited.contains("carried: 2"))
+        #expect(edited.contains("by: claude"))
+    }
+
+    @Test func setTitleKeepsCompletedState() {
+        let edited = TodoParser.setTitle(line: "- [x] Done thing | effort: 1h", title: "Renamed")
+        #expect(edited.hasPrefix("- [x] Renamed"))
+        #expect(edited.contains("effort: 1h"))
+    }
+
+    @Test func setTitleOnProposedLine() {
+        let edited = TodoParser.setTitle(line: "- [?] Maybe", title: "Definitely maybe")
+        #expect(edited == "- [?] Definitely maybe")
+    }
+}

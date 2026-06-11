@@ -244,6 +244,39 @@ final class ScheduleStore {
         recompute()
     }
 
+    /// Edit a task's core fields in place, preserving every other token on the
+    /// line (carried, by, defer, …). Empty project/effort/deadline removes the
+    /// token.
+    func updateTask(_ item: TodoItem, title: String, project: String, effort: String, deadline: String) {
+        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+        guard !trimmedTitle.isEmpty else { return }
+
+        var line = TodoParser.setTitle(line: rawTodoLines[item.lineIndex], title: trimmedTitle)
+        let fields = [("project", project), ("effort", effort), ("deadline", deadline)]
+        for (key, raw) in fields {
+            let value = raw.trimmingCharacters(in: .whitespaces)
+            line = TodoParser.setToken(line: line, key: key, value: value.isEmpty ? nil : value)
+        }
+        rawTodoLines[item.lineIndex] = line
+        if !project.trimmingCharacters(in: .whitespaces).isEmpty {
+            saveProjectIfNew(project.trimmingCharacters(in: .whitespaces))
+        }
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
+    }
+
+    /// Delete a task and its notes from todos.md.
+    func removeTask(_ item: TodoItem) {
+        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
+        let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
+        rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
+    }
+
     func updateNotes(for item: TodoItem, notes: [String]) {
         fileWatcher?.isSelfEditing = true
         TodoParser.updateNotes(lines: &rawTodoLines, at: item.lineIndex, notes: notes)

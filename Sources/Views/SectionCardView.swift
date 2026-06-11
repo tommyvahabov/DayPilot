@@ -29,7 +29,11 @@ struct SectionCardView: View {
                                 compact: false,
                                 onComplete: { store.completeTask(item) },
                                 onUncomplete: { store.uncompleteTask(item) },
-                                onNotesChanged: { notes in store.updateNotes(for: item, notes: notes) }
+                                onNotesChanged: { notes in store.updateNotes(for: item, notes: notes) },
+                                onEdit: { title, project, effort, deadline in
+                                    store.updateTask(item, title: title, project: project, effort: effort, deadline: deadline)
+                                },
+                                onDelete: { store.removeTask(item) }
                             )
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)

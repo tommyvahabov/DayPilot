@@ -133,6 +133,19 @@ enum TodoParser {
         )
     }
 
+    /// Replace the title segment of a task line, preserving the checkbox state
+    /// and every pipe token after it.
+    static func setTitle(line: String, title: String) -> String {
+        var parts = line.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let first = parts.first else { return line }
+        for prefix in ["- [ ] ", "- [x] ", "- [?] "] where first.hasPrefix(prefix) {
+            parts[0] = prefix + title
+            return parts.joined(separator: " | ")
+        }
+        return line
+    }
+
     /// Set, replace, or (with nil) remove a `key: value` token on a task line.
     /// The checkbox + title segment is left untouched.
     static func setToken(line: String, key: String, value: String?) -> String {

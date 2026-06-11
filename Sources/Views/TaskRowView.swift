@@ -7,12 +7,26 @@ struct TaskRowView: View {
     let onComplete: () -> Void
     var onUncomplete: (() -> Void)?
     var onNotesChanged: (([String]) -> Void)?
+    /// (title, project, effort, deadline) — empty strings clear a field.
+    var onEdit: ((String, String, String, String) -> Void)?
+    var onDelete: (() -> Void)?
 
     @State private var isExpanded = false
     @State private var noteText = ""
     @State private var planeVisible = false
     @State private var flying = false
     @State private var titleHidden = false
+    @State private var isEditing = false
+    @State private var editTitle = ""
+    @State private var editProject = ""
+    @State private var editEffort = ""
+    @State private var editDeadline = ""
+
+    private static let deadlineFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 
     private func triggerComplete() {
         guard !flying else { return }
@@ -31,6 +45,68 @@ struct TaskRowView: View {
     }
 
     private var liftoff: Bool { flying }
+
+    private var editForm: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("Title", text: $editTitle)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+                .onSubmit { saveEdit() }
+
+            HStack(spacing: 6) {
+                TextField("project", text: $editProject)
+                    .frame(width: 90)
+                TextField("30m", text: $editEffort)
+                    .frame(width: 54)
+                TextField("YYYY-MM-DD", text: $editDeadline)
+                    .frame(width: 94)
+            }
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11))
+
+            HStack(spacing: 6) {
+                if let onDelete {
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete task (auto-git keeps a backup)")
+                }
+                Spacer()
+                Button("Cancel") {
+                    withAnimation { isEditing = false }
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                Button("Save") { saveEdit() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(editTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func beginEdit() {
+        editTitle = item.title
+        editProject = item.project ?? ""
+        editEffort = DurationParser.format(minutes: item.effortMinutes)
+        editDeadline = item.deadline.map { Self.deadlineFormatter.string(from: $0) } ?? ""
+        withAnimation(.easeInOut(duration: 0.15)) { isEditing = true }
+    }
+
+    private func saveEdit() {
+        guard !editTitle.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        onEdit?(editTitle, editProject, editEffort, editDeadline)
+        withAnimation {
+            isEditing = false
+            isExpanded = false
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -143,30 +219,46 @@ struct TaskRowView: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 4) {
-                    if !item.notes.isEmpty {
-                        ForEach(item.notes, id: \.self) { note in
-                            Text(note)
+                    if isEditing {
+                        editForm
+                    } else {
+                        if !item.notes.isEmpty {
+                            ForEach(item.notes, id: \.self) { note in
+                                Text(note)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        HStack(spacing: 6) {
+                            TextField("Add a note...", text: $noteText, axis: .vertical)
                                 .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                                .textFieldStyle(.plain)
+                                .lineLimit(1...5)
 
-                    HStack(spacing: 6) {
-                        TextField("Add a note...", text: $noteText, axis: .vertical)
-                            .font(.callout)
-                            .textFieldStyle(.plain)
-                            .lineLimit(1...5)
+                            if onEdit != nil {
+                                Button {
+                                    beginEdit()
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.borderless)
+                                .controlSize(.small)
+                                .help("Edit task")
+                            }
 
-                        Button("Save") {
-                            let notes = noteText
-                                .split(separator: "\n", omittingEmptySubsequences: false)
-                                .map { String($0) }
-                                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                            onNotesChanged?(notes)
-                            withAnimation { isExpanded = false }
+                            Button("Save") {
+                                let notes = noteText
+                                    .split(separator: "\n", omittingEmptySubsequences: false)
+                                    .map { String($0) }
+                                    .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                                onNotesChanged?(notes)
+                                withAnimation { isExpanded = false }
+                            }
+                            .buttonStyle(.borderless)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
                     }
                 }
                 .padding(.leading, 56)
