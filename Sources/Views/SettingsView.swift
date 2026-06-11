@@ -3,12 +3,14 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var store: ScheduleStore
     @State private var capacityText: String = ""
+    @AppStorage("hudMode") private var hudMode: String = "compact"
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 capacityCard
+                hudCard
                 filesCard
                 aboutCard
             }
@@ -74,6 +76,30 @@ struct SettingsView: View {
                     Text(DurationParser.format(minutes: store.context.dailyCapacityMinutes))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.primary)
+                }
+            }
+        }
+    }
+
+    private var hudCard: some View {
+        card(icon: "gauge.open.with.lines.needle.33percent", accent: .indigo, title: "Menubar HUD", subtitle: "What the menubar shows at a glance") {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("", selection: $hudMode) {
+                    Text("Icon only").tag("icon")
+                    Text("Time left").tag("compact")
+                    Text("Task + time").tag("full")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 320)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Text("Warning triangle = master caution: the plan no longer fits the day.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
                 }
             }
         }

@@ -62,15 +62,8 @@ struct DayPilotApp: App {
             ScheduleView(store: store)
                 .modifier(WindowOpenerBinder())
         } label: {
-            Group {
-                if let nsImage = Self.menubarImage {
-                    Image(nsImage: nsImage)
-                        .renderingMode(.original)
-                } else {
-                    Image(systemName: "checklist.checked")
-                }
-            }
-            .modifier(WindowOpenerBinder())
+            MenubarHUDLabel(store: store)
+                .modifier(WindowOpenerBinder())
         }
         .menuBarExtraStyle(.window)
 
