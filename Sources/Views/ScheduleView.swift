@@ -16,6 +16,10 @@ struct ScheduleView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
 
+            ProposalsView(store: store)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+
             NowCardView(store: store)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)

@@ -33,6 +33,8 @@ struct TodayView: View {
 
                 PreflightCardView(store: store)
 
+                ProposalsView(store: store)
+
                 SectionCardView(
                     title: "Today",
                     icon: "sun.max.fill",

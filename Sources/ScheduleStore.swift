@@ -11,6 +11,8 @@ final class ScheduleStore {
     private(set) var completedTodayCount: Int = 0
     private(set) var totalTodayCount: Int = 0
     private(set) var doneLog: [DoneDay] = []
+    /// Agent-proposed `- [?]` tasks awaiting accept/reject.
+    private(set) var proposals: [TodoItem] = []
 
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
@@ -109,6 +111,7 @@ final class ScheduleStore {
             }
 
             queue = Scheduler.schedule(todos: todos, context: context)
+            proposals = TodoParser.proposals(lines: rawTodoLines)
 
             // Filter completed to only today's by matching titles in done.md
             let todayTitles = Set(todayDoneTitles())
@@ -395,6 +398,27 @@ final class ScheduleStore {
 
     func markPreflight() {
         appendDayMarker("preflight \(Self.clockFormatter.string(from: Date()))")
+        recompute()
+    }
+
+    // MARK: - Proposals
+
+    func acceptProposal(_ item: TodoItem) {
+        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
+        rawTodoLines[item.lineIndex] = rawTodoLines[item.lineIndex]
+            .replacingOccurrences(of: "- [?] ", with: "- [ ] ")
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        recompute()
+    }
+
+    func rejectProposal(_ item: TodoItem) {
+        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
+        let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
+        rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+        appendDayMarker("rejected: \(item.title)")
         recompute()
     }
 

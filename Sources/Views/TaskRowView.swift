@@ -100,6 +100,14 @@ struct TaskRowView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+                if item.addedBy == "claude" {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.indigo)
+                        .opacity(liftoff ? 0 : 1)
+                        .help("Added by Claude" + (item.notes.first.map { " — \($0)" } ?? ""))
+                }
+
                 if item.carried >= 3 {
                     Label("\(item.carried)", systemImage: "arrow.uturn.right.circle")
                         .font(.system(size: 9, weight: .semibold))
