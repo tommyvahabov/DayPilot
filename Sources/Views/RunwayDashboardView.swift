@@ -8,7 +8,7 @@ struct RunwayDashboardView: View {
     private var activeProjects: Int {
         Set((store.queue.today + store.queue.tomorrow + store.queue.backlog).compactMap { $0.project }).count
     }
-    private var streak: Int { computeStreak(from: store.doneLog) }
+    private var streak: Int { RitualStreak.compute(days: store.doneLog) }
 
     var body: some View {
         ZStack {
@@ -72,9 +72,9 @@ struct RunwayDashboardView: View {
             StatCardView(
                 icon: "flame.fill",
                 value: "\(streak)",
-                label: "Day streak",
+                label: "Flight days",
                 accent: .orange,
-                sublabel: streak == 0 ? "Ship something today" : "Keep it alive"
+                sublabel: streak == 0 ? "Close a day to start" : "Plan it, fly it, close it"
             )
             StatCardView(
                 icon: "tag.fill",
@@ -164,34 +164,4 @@ struct RunwayDashboardView: View {
         }
     }
 
-    private func computeStreak(from log: [DoneDay]) -> Int {
-        guard !log.isEmpty else { return 0 }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-
-        let datesWithEntries: Set<Date> = Set(log.compactMap { day in
-            day.entries.isEmpty ? nil : formatter.date(from: day.date)
-        })
-
-        guard !datesWithEntries.isEmpty else { return 0 }
-
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        var cursor = today
-        var streak = 0
-
-        if !datesWithEntries.contains(where: { calendar.isDate($0, inSameDayAs: today) }) {
-            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today) else { return 0 }
-            cursor = yesterday
-        }
-
-        while datesWithEntries.contains(where: { calendar.isDate($0, inSameDayAs: cursor) }) {
-            streak += 1
-            guard let prev = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = prev
-        }
-
-        return streak
-    }
 }

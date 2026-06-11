@@ -27,6 +27,12 @@ final class ScheduleStore {
         return f
     }()
 
+    private static let clockFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     init() {
         self.schedulerDir = NSHomeDirectory() + "/scheduler"
     }
@@ -331,10 +337,7 @@ final class ScheduleStore {
                 if l.hasPrefix("## ") || l.isEmpty { break }
                 insertAt += 1
             }
-            var entry = "- [x] \(item.title)"
-            if let p = item.project { entry += " | project: \(p)" }
-            entry += " | effort: \(DurationParser.format(minutes: item.effortMinutes))"
-            lines.insert(entry, at: insertAt)
+            lines.insert(doneEntry(for: item), at: insertAt)
         } else {
             var insertAt = 0
             if let first = lines.first, first.hasPrefix("# ") {
@@ -343,14 +346,55 @@ final class ScheduleStore {
                     insertAt = 2
                 }
             }
-            var entry = "- [x] \(item.title)"
-            if let p = item.project { entry += " | project: \(p)" }
-            entry += " | effort: \(DurationParser.format(minutes: item.effortMinutes))"
-            lines.insert(contentsOf: [header, entry, ""], at: insertAt)
+            lines.insert(contentsOf: [header, doneEntry(for: item), ""], at: insertAt)
         }
 
         let content = lines.joined(separator: "\n")
         try? content.write(toFile: donePath, atomically: true, encoding: .utf8)
+    }
+
+    private func doneEntry(for item: TodoItem) -> String {
+        var entry = "- [x] \(item.title)"
+        if let p = item.project { entry += " | project: \(p)" }
+        entry += " | effort: \(DurationParser.format(minutes: item.effortMinutes))"
+        entry += " | at: \(Self.clockFormatter.string(from: Date()))"
+        return entry
+    }
+
+    /// Append a `> marker` line under today's header in done.md, creating the
+    /// header if needed. Used for ritual/audit markers (preflight, closed, …).
+    private func appendDayMarker(_ marker: String) {
+        let today = Self.dateFormatter.string(from: Date())
+        let header = "## \(today)"
+
+        var lines: [String] = []
+        if FileManager.default.fileExists(atPath: donePath) {
+            let content = (try? String(contentsOfFile: donePath, encoding: .utf8)) ?? ""
+            lines = content.components(separatedBy: .newlines)
+        }
+
+        if let headerIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) {
+            var insertAt = headerIdx + 1
+            while insertAt < lines.count {
+                let l = lines[insertAt].trimmingCharacters(in: .whitespaces)
+                if l.hasPrefix("## ") || l.isEmpty { break }
+                insertAt += 1
+            }
+            lines.insert("> \(marker)", at: insertAt)
+        } else {
+            var insertAt = 0
+            if let first = lines.first, first.hasPrefix("# ") {
+                insertAt = 1
+                if insertAt < lines.count && lines[insertAt].isEmpty { insertAt = 2 }
+            }
+            lines.insert(contentsOf: [header, "> \(marker)", ""], at: insertAt)
+        }
+        try? lines.joined(separator: "\n").write(toFile: donePath, atomically: true, encoding: .utf8)
+    }
+
+    func markPreflight() {
+        appendDayMarker("preflight \(Self.clockFormatter.string(from: Date()))")
+        recompute()
     }
 
     private func removeFromDoneLog(_ item: TodoItem) {
@@ -443,42 +487,7 @@ final class ScheduleStore {
     private func parseDoneLog() -> [DoneDay] {
         guard FileManager.default.fileExists(atPath: donePath) else { return [] }
         guard let content = try? String(contentsOfFile: donePath, encoding: .utf8) else { return [] }
-
-        let lines = content.components(separatedBy: .newlines)
-        var days: [DoneDay] = []
-        var currentDate: String?
-        var currentEntries: [DoneEntry] = []
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("## ") {
-                if let date = currentDate {
-                    days.append(DoneDay(id: date, date: date, entries: currentEntries))
-                }
-                currentDate = String(trimmed.dropFirst(3))
-                currentEntries = []
-            } else if trimmed.hasPrefix("- [x] "), currentDate != nil {
-                let raw = String(trimmed.dropFirst(6))
-                let parts = raw.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
-                let title = parts[0]
-                var project: String?
-                var effort = ""
-                for part in parts.dropFirst() {
-                    let lower = part.lowercased()
-                    if lower.hasPrefix("project:") {
-                        project = part.dropFirst(8).trimmingCharacters(in: .whitespaces)
-                    } else if lower.hasPrefix("effort:") {
-                        effort = part.dropFirst(7).trimmingCharacters(in: .whitespaces)
-                    }
-                }
-                currentEntries.append(DoneEntry(title: title, project: project, effort: effort))
-            }
-        }
-        if let date = currentDate {
-            days.append(DoneDay(id: date, date: date, entries: currentEntries))
-        }
-
-        return days
+        return DoneLogParser.parse(content: content)
     }
 
     // MARK: - Private
