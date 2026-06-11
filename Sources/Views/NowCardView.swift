@@ -118,6 +118,7 @@ struct NowCardView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .help(task.rationale ?? "")
                 metaRow(for: task)
             }
         } else {

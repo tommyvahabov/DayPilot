@@ -297,8 +297,9 @@ final class ScheduleStore {
 
     // MARK: - Flight math
 
+    /// Calibrated remaining minutes — what the ETA and caution math believe.
     var remainingTodayMinutes: Int {
-        queue.today.reduce(0) { $0 + $1.effortMinutes }
+        queue.today.reduce(0) { $0 + Scheduler.effectiveEffort($1, context: context) }
     }
 
     var minutesDoneToday: Int {

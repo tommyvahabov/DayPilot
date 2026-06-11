@@ -145,6 +145,28 @@ struct SchedulerTests {
         #expect(eta == now.addingTimeInterval(90 * 60))
     }
 
+    // MARK: Calibration
+
+    @Test func calibrationInflatesPackingEffort() {
+        // Two 30m tasks at ×1.5 = 45m effective each; 60m capacity fits only one.
+        let ctx = MemoryContext(dailyCapacityMinutes: 60, calibration: ["alpha": 1.5])
+        let todos = [
+            TodoItem(title: "First", project: "Alpha", effortMinutes: 30, lineIndex: 1),
+            TodoItem(title: "Second", project: "Alpha", effortMinutes: 30, lineIndex: 2),
+        ]
+        let queue = Scheduler.schedule(todos: todos, context: ctx)
+        #expect(queue.today.map(\.title) == ["First"])
+        #expect(queue.tomorrow.map(\.title) == ["Second"])
+    }
+
+    @Test func scheduledItemsCarryRationale() {
+        let queue = Scheduler.schedule(
+            todos: [TodoItem(title: "T", project: "Alpha", effortMinutes: 30, lineIndex: 1)],
+            context: context
+        )
+        #expect(queue.today[0].rationale?.contains("today") == true)
+    }
+
     // MARK: Reflow (Go-Around)
 
     @Test func reflowKeepsWhatFitsAndDivertsTheRest() {

@@ -15,11 +15,21 @@ enum Scheduler {
         return a.lineIndex < b.lineIndex
     }
 
+    /// Estimate × the project's calibration multiplier (Claude-maintained, from
+    /// done.md actuals). Display always shows the raw estimate; packing and ETA
+    /// use this.
+    static func effectiveEffort(_ item: TodoItem, context: MemoryContext) -> Int {
+        let mult = context.calibrationMultiplier(for: item.project)
+        return Int((Double(item.effortMinutes) * mult).rounded())
+    }
+
     static func schedule(todos: [TodoItem], context: MemoryContext, today date: Date = Date()) -> DayQueue {
         let sorted = todos.sorted { lessThan($0, $1, context: context) }
 
         let cal = Calendar.current
         let startOfTomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: date))!
+        let deferFormatter = DateFormatter()
+        deferFormatter.dateFormat = "MMM d"
 
         var today: [TodoItem] = []
         var tomorrow: [TodoItem] = []
@@ -28,29 +38,59 @@ enum Scheduler {
         var tomorrowTotal = 0
         let cap = context.dailyCapacityMinutes
 
-        for item in sorted {
+        for var item in sorted {
+            let effort = effectiveEffort(item, context: context)
             // Deferred tasks skip today's packing entirely.
             if let d = item.deferUntil, d >= startOfTomorrow {
-                if cal.isDate(d, inSameDayAs: startOfTomorrow), tomorrowTotal + item.effortMinutes <= cap {
+                if cal.isDate(d, inSameDayAs: startOfTomorrow), tomorrowTotal + effort <= cap {
+                    item.rationale = "tomorrow — deferred" + rationaleSuffix(item, effort: effort, context: context)
                     tomorrow.append(item)
-                    tomorrowTotal += item.effortMinutes
+                    tomorrowTotal += effort
                 } else {
+                    item.rationale = "backlog — deferred to \(deferFormatter.string(from: d))"
                     backlog.append(item)
                 }
                 continue
             }
-            if todayTotal + item.effortMinutes <= cap {
+            if todayTotal + effort <= cap {
+                item.rationale = "today — fits \(DurationParser.format(minutes: todayTotal + effort))/\(DurationParser.format(minutes: cap))"
+                    + rationaleSuffix(item, effort: effort, context: context)
                 today.append(item)
-                todayTotal += item.effortMinutes
-            } else if tomorrowTotal + item.effortMinutes <= cap {
+                todayTotal += effort
+            } else if tomorrowTotal + effort <= cap {
+                item.rationale = "tomorrow — over today's capacity (\(DurationParser.format(minutes: cap)))"
+                    + rationaleSuffix(item, effort: effort, context: context)
                 tomorrow.append(item)
-                tomorrowTotal += item.effortMinutes
+                tomorrowTotal += effort
             } else {
+                item.rationale = "backlog — beyond today and tomorrow's capacity"
                 backlog.append(item)
             }
         }
 
         return DayQueue(today: today, tomorrow: tomorrow, backlog: backlog)
+    }
+
+    private static let deadlineFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
+    private static func rationaleSuffix(_ item: TodoItem, effort: Int, context: MemoryContext) -> String {
+        var parts: [String] = []
+        if let deadline = item.deadline {
+            parts.append("deadline \(deadlineFormatter.string(from: deadline))")
+        }
+        let priority = context.priority(for: item.project)
+        if priority != Int.max, let project = item.project {
+            parts.append("P\(priority) \(project)")
+        }
+        if effort != item.effortMinutes {
+            let mult = context.calibrationMultiplier(for: item.project)
+            parts.append("\(DurationParser.format(minutes: effort)) effective (\(DurationParser.format(minutes: item.effortMinutes)) × \(String(format: "%.1f", mult)))")
+        }
+        return parts.isEmpty ? "" : " · " + parts.joined(separator: " · ")
     }
 
     // MARK: - Go-Around
@@ -70,9 +110,10 @@ enum Scheduler {
         var used = 0
         for item in todos.sorted(by: { lessThan($0, $1, context: context) }) {
             if let d = item.deferUntil, d >= startOfTomorrow { continue }  // already not today's problem
-            if used + item.effortMinutes <= available {
+            let effort = effectiveEffort(item, context: context)
+            if used + effort <= available {
                 kept.append(item)
-                used += item.effortMinutes
+                used += effort
             } else {
                 diverted.append(item)
             }

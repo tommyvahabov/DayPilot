@@ -96,6 +96,7 @@ struct TaskRowView: View {
                     .disabled(flying)
                     .opacity(titleHidden ? 0 : 1)
                     .offset(x: flying ? 760 : 0)
+                    .help(item.rationale ?? "")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
