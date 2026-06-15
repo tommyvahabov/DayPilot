@@ -13,6 +13,12 @@ final class ScheduleStore {
     private(set) var doneLog: [DoneDay] = []
     /// Agent-proposed `- [?]` tasks awaiting accept/reject.
     private(set) var proposals: [TodoItem] = []
+    /// Free-form ideas / journal entries from ideas.md.
+    private(set) var ideas: [Idea] = []
+
+    /// Set by the popover to deep-link the main window to a tab; consumed and
+    /// cleared by MainWindowView.
+    var route: SidebarTab?
 
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
@@ -28,6 +34,7 @@ final class ScheduleStore {
     var memoryPath: String { "\(schedulerDir)/memory.md" }
     var donePath: String { "\(schedulerDir)/done.md" }
     var briefingPath: String { "\(schedulerDir)/briefing.md" }
+    var ideasPath: String { "\(schedulerDir)/ideas.md" }
 
     /// Claude's morning briefing body, only when briefing.md is dated today.
     private(set) var briefing: String?
@@ -100,6 +107,9 @@ final class ScheduleStore {
         if !fm.fileExists(atPath: donePath) {
             try? "".write(toFile: donePath, atomically: true, encoding: .utf8)
         }
+        if !fm.fileExists(atPath: ideasPath) {
+            try? "# Ideas\n".write(toFile: ideasPath, atomically: true, encoding: .utf8)
+        }
     }
 
     func recompute() {
@@ -136,17 +146,47 @@ final class ScheduleStore {
             completedTodayCount = todayStats.count
             totalTodayCount = todayStats.count + queue.today.count
             doneLog = parseDoneLog()
+            ideas = readIdeas()
         } catch {
             errorMessage = "Failed to read files: \(error.localizedDescription)"
         }
     }
 
     func completeTask(_ item: TodoItem) {
+        // Re-resolve: the captured lineIndex can go stale during the 0.8s
+        // completion animation if todos.md changed underneath us.
+        let idx = resolveLineIndex(for: item, openOnly: true)
+        guard idx >= 0 else { recompute(); return }
         fileWatcher?.isSelfEditing = true
-        TodoParser.markComplete(lines: &rawTodoLines, at: item.lineIndex)
+        TodoParser.markComplete(lines: &rawTodoLines, at: idx)
         writeBack()
         logCompletion(item)
         recompute()
+    }
+
+    /// Re-resolve a task's line index at action time by matching its (original)
+    /// title, since a captured lineIndex can go stale when todos.md changes
+    /// between render and action (external MCP edit, completion animation, an
+    /// open editor sheet). Returns -1 if the task can't be located.
+    private func resolveLineIndex(for item: TodoItem, openOnly: Bool = false) -> Int {
+        let prefixes = openOnly ? ["- [ ] "] : ["- [ ] ", "- [x] ", "- [?] "]
+        func matches(_ trimmed: String) -> Bool {
+            for p in prefixes where trimmed.hasPrefix(p) {
+                let content = trimmed.dropFirst(6)
+                let parsed = content.split(separator: "|").first
+                    .map { $0.trimmingCharacters(in: .whitespaces) } ?? String(content)
+                return parsed == item.title
+            }
+            return false
+        }
+        if item.lineIndex >= 0, item.lineIndex < rawTodoLines.count,
+           matches(rawTodoLines[item.lineIndex].trimmingCharacters(in: .whitespaces)) {
+            return item.lineIndex
+        }
+        for (i, line) in rawTodoLines.enumerated() where matches(line.trimmingCharacters(in: .whitespaces)) {
+            return i
+        }
+        return -1
     }
 
     func uncompleteTask(_ item: TodoItem) {
@@ -244,43 +284,72 @@ final class ScheduleStore {
         recompute()
     }
 
-    /// Edit a task's core fields in place, preserving every other token on the
-    /// line (carried, by, defer, …). Empty project/effort/deadline removes the
-    /// token.
-    func updateTask(_ item: TodoItem, title: String, project: String, effort: String, deadline: String) {
-        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
-        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
-        guard !trimmedTitle.isEmpty else { return }
+    /// Full edit from the task editor modal, applied in a single write: title +
+    /// tokens on the task line, the notes block below it, the `attach:` token,
+    /// and on-disk cleanup of any removed attachment files.
+    func applyTaskEdit(
+        _ item: TodoItem,
+        title: String,
+        project: String,
+        effort: String,
+        deadline: String,
+        deferUntil: String,
+        notes: [String],
+        attachments: [Attachment]
+    ) {
+        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        // Re-resolve in case the line moved (external edit while the modal was open).
+        let lineIndex = resolveLineIndex(for: item)
+        guard lineIndex >= 0 else { recompute(); return }
 
-        var line = TodoParser.setTitle(line: rawTodoLines[item.lineIndex], title: trimmedTitle)
-        let fields = [("project", project), ("effort", effort), ("deadline", deadline)]
+        var line = TodoParser.setTitle(line: rawTodoLines[lineIndex], title: title)
+        let fields: [(String, String)] = [
+            ("project", project), ("effort", effort),
+            ("deadline", deadline), ("defer", deferUntil),
+        ]
         for (key, raw) in fields {
             let value = raw.trimmingCharacters(in: .whitespaces)
             line = TodoParser.setToken(line: line, key: key, value: value.isEmpty ? nil : value)
         }
-        rawTodoLines[item.lineIndex] = line
-        if !project.trimmingCharacters(in: .whitespaces).isEmpty {
-            saveProjectIfNew(project.trimmingCharacters(in: .whitespaces))
+        line = TodoParser.setToken(line: line, key: "attach", value: TodoParser.attachToken(for: attachments))
+        rawTodoLines[lineIndex] = line
+
+        // Notes live in the indented block directly below the task line.
+        TodoParser.updateNotes(lines: &rawTodoLines, at: lineIndex, notes: notes)
+
+        fileWatcher?.isSelfEditing = true
+        writeBack()
+
+        // Delete files for attachments the user removed — but only if no other
+        // task still references them.
+        let kept = Set(attachments.map(\.relativePath))
+        for gone in item.attachments where !kept.contains(gone.relativePath) {
+            deleteAttachmentFileIfUnreferenced(gone)
         }
-        fileWatcher?.isSelfEditing = true
-        writeBack()
+
+        let proj = project.trimmingCharacters(in: .whitespaces)
+        if !proj.isEmpty { saveProjectIfNew(proj) }
         recompute()
     }
 
-    /// Delete a task and its notes from todos.md.
+    /// Delete an attachment's backing file only when no remaining task line
+    /// references it, so a duplicated path can't orphan a still-used file.
+    private func deleteAttachmentFileIfUnreferenced(_ attachment: Attachment) {
+        let stillReferenced = rawTodoLines.contains { $0.contains(attachment.relativePath) }
+        if !stillReferenced { AttachmentService.deleteFile(attachment) }
+    }
+
+    /// Delete a task, its notes, and any attachment files from todos.md.
     func removeTask(_ item: TodoItem) {
-        guard item.lineIndex >= 0, item.lineIndex < rawTodoLines.count else { return }
-        let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: item.lineIndex)
-        rawTodoLines.removeSubrange(item.lineIndex..<(item.lineIndex + len))
+        let lineIndex = resolveLineIndex(for: item)
+        guard lineIndex >= 0 else { recompute(); return }
+        let len = 1 + TodoParser.noteLineCount(lines: rawTodoLines, at: lineIndex)
+        rawTodoLines.removeSubrange(lineIndex..<(lineIndex + len))
         fileWatcher?.isSelfEditing = true
         writeBack()
-        recompute()
-    }
-
-    func updateNotes(for item: TodoItem, notes: [String]) {
-        fileWatcher?.isSelfEditing = true
-        TodoParser.updateNotes(lines: &rawTodoLines, at: item.lineIndex, notes: notes)
-        writeBack()
+        for attachment in item.attachments {
+            deleteAttachmentFileIfUnreferenced(attachment)
+        }
         recompute()
     }
 
@@ -624,6 +693,94 @@ final class ScheduleStore {
         return DoneLogParser.parse(content: content)
     }
 
+    // MARK: - Ideas
+
+    private func readIdeas() -> [Idea] {
+        guard let content = try? String(contentsOfFile: ideasPath, encoding: .utf8) else { return [] }
+        return Self.sortIdeas(IdeasParser.parse(content: content))
+    }
+
+    private static func sortIdeas(_ list: [Idea]) -> [Idea] {
+        list.sorted { a, b in
+            if a.pinned != b.pinned { return a.pinned }
+            if a.createdAt != b.createdAt { return a.createdAt > b.createdAt }
+            return a.id > b.id  // stable tiebreak so equal timestamps never reorder
+        }
+    }
+
+    private func writeIdeas(_ list: [Idea]) {
+        let ordered = Self.sortIdeas(list)
+        fileWatcher?.isSelfEditing = true
+        try? IdeasParser.serialize(ordered).write(toFile: ideasPath, atomically: true, encoding: .utf8)
+        ideas = ordered
+        git.commitSoon("app: update ideas")
+    }
+
+    @discardableResult
+    func addIdea(title: String, body: String) -> Idea? {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let b = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !(t.isEmpty && b.isEmpty) else { return nil }
+        let idea = Idea(
+            id: IdeasParser.newID(),
+            title: t.isEmpty ? Self.deriveTitle(from: b) : t,
+            body: b,
+            createdAt: Date(),
+            pinned: false
+        )
+        writeIdeas([idea] + ideas)
+        return idea
+    }
+
+    func updateIdea(_ id: String, title: String, body: String) {
+        guard let idx = ideas.firstIndex(where: { $0.id == id }) else { return }
+        var list = ideas
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let b = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        list[idx].title = t.isEmpty ? Self.deriveTitle(from: b) : t
+        list[idx].body = b
+        writeIdeas(list)
+    }
+
+    func deleteIdea(_ id: String) {
+        writeIdeas(ideas.filter { $0.id != id })
+    }
+
+    func toggleIdeaPin(_ id: String) {
+        guard let idx = ideas.firstIndex(where: { $0.id == id }) else { return }
+        var list = ideas
+        list[idx].pinned.toggle()
+        writeIdeas(list)
+    }
+
+    /// Promote an idea into a real task; optionally clear the idea afterward.
+    func promoteIdeaToTask(_ idea: Idea, project: String? = nil, removeIdea: Bool) {
+        let titleSource = idea.title.isEmpty ? idea.preview : idea.title
+        var raw = TodoParser.sanitizeTitle(titleSource)
+        if let project, !project.isEmpty { raw += " | project: \(project)" }
+        var bodyLines = idea.body
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        // When the title was derived from the body, its first line already became
+        // the title — don't repeat it as a note.
+        if idea.title.isEmpty, let first = bodyLines.first, first == idea.preview {
+            bodyLines.removeFirst()
+        }
+        let notes = bodyLines.filter { $0 != idea.title }
+        addTask(raw: raw, notes: notes)
+        if removeIdea { deleteIdea(idea.id) }
+    }
+
+    private static func deriveTitle(from body: String) -> String {
+        let first = body
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespaces) ?? "Untitled"
+        return first.count > 60 ? String(first.prefix(60)).trimmingCharacters(in: .whitespaces) + "…" : first
+    }
+
     // MARK: - Private
 
     private func writeBack() {
@@ -635,7 +792,7 @@ final class ScheduleStore {
     private func setupFileWatcher() {
         let dir = schedulerDir
         guard FileManager.default.fileExists(atPath: dir) else { return }
-        let paths = [todosPath, memoryPath].filter { FileManager.default.fileExists(atPath: $0) }
+        let paths = [todosPath, memoryPath, ideasPath].filter { FileManager.default.fileExists(atPath: $0) }
         fileWatcher = FileWatcher(filePaths: paths) { [weak self] in
             Task { @MainActor in
                 guard let self else { return }

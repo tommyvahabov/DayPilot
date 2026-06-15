@@ -9,6 +9,8 @@ struct TodoItem: Identifiable, Equatable {
     var isCompleted: Bool
     var lineIndex: Int
     var notes: [String]
+    /// Files attached to this task. Persisted as the line's `attach:` token.
+    var attachments: [Attachment]
     /// Snoozed until this date; excluded from today's packing before then.
     var deferUntil: Date?
     /// Times this task rolled over to another day (go-around or post-flight).
@@ -29,6 +31,7 @@ struct TodoItem: Identifiable, Equatable {
         isCompleted: Bool = false,
         lineIndex: Int = -1,
         notes: [String] = [],
+        attachments: [Attachment] = [],
         deferUntil: Date? = nil,
         carried: Int = 0,
         addedBy: String? = nil,
@@ -43,6 +46,7 @@ struct TodoItem: Identifiable, Equatable {
         self.isCompleted = isCompleted
         self.lineIndex = lineIndex
         self.notes = notes
+        self.attachments = attachments
         self.deferUntil = deferUntil
         self.carried = carried
         self.addedBy = addedBy

@@ -184,7 +184,7 @@ struct AddTaskView: View {
     }
 
     private func submit() {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        let trimmed = TodoParser.sanitizeTitle(title)
         guard !trimmed.isEmpty else { return }
         var raw = trimmed
         if !project.isEmpty { raw += " | project: \(project)" }
@@ -226,7 +226,7 @@ struct AddTaskView: View {
     }
 
     private func add() {
-        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        let trimmed = TodoParser.sanitizeTitle(title)
         guard !trimmed.isEmpty else { return }
 
         var raw = trimmed

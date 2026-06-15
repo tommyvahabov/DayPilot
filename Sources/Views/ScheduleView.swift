@@ -70,6 +70,14 @@ struct ScheduleView: View {
                     .help("Post-flight: decide what happens to each leftover, then close out")
                 }
 
+                Button(action: { store.route = .ideas; openWindow(id: "main-window") }) {
+                    Image(systemName: "lightbulb")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("Open Ideas")
+
                 Button(action: { openWindow(id: "main-window") }) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.caption)

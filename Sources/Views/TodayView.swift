@@ -18,82 +18,58 @@ struct TodayView: View {
         return f
     }()
 
-    private var minutesLeft: Int {
-        store.queue.today.reduce(0) { $0 + $1.effortMinutes }
-    }
-
-    private var minutesDone: Int {
-        store.queue.completedToday.reduce(0) { $0 + $1.effortMinutes }
-    }
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
+        VStack(alignment: .leading, spacing: 14) {
+            header
+                .padding(.horizontal, 24)
+                .padding(.top, 22)
 
-                PreflightCardView(store: store)
+            contextCards
+                .padding(.horizontal, 24)
 
-                BriefingCardView(store: store)
+            BoardView(store: store)
+                .padding(.horizontal, 24)
 
-                ProposalsView(store: store)
-
-                SectionCardView(
-                    title: "Today",
-                    icon: "sun.max.fill",
-                    accent: .green,
-                    items: $store.queue.today,
-                    store: store,
-                    subtitle: subtitle,
-                    emptyText: "Runway is clear — nothing left for today",
-                    maxHeight: nil
-                )
-
-                if !store.queue.completedToday.isEmpty {
-                    SectionCardView(
-                        title: "Done today",
-                        icon: "checkmark.seal.fill",
-                        accent: .secondary,
-                        items: $store.queue.completedToday,
-                        store: store,
-                        subtitle: "\(store.queue.completedToday.count) shipped  •  \(formatMinutes(minutesDone)) logged",
-                        emptyText: "Nothing shipped yet",
-                        maxHeight: nil
-                    )
-                }
-            }
-            .padding(24)
-            .frame(maxWidth: 800, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
+            bottomBar
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.background)
         .sheet(isPresented: $showPostflight) {
             PostflightView(store: store)
         }
+        .task(id: store.lastGoAround) {
+            guard store.lastGoAround != nil else { return }
+            try? await Task.sleep(for: .seconds(4))
+            store.lastGoAround = nil
+        }
     }
+
+    @ViewBuilder
+    private var contextCards: some View {
+        VStack(spacing: 10) {
+            PreflightCardView(store: store)
+            BriefingCardView(store: store, collapsible: true)
+            ProposalsView(store: store)
+        }
+    }
+
+    // MARK: - Header
 
     private var header: some View {
         ZStack(alignment: .leading) {
             greetingHeader
                 .offset(y: showGreeting ? 0 : -78)
-                .rotation3DEffect(
-                    .degrees(showGreeting ? 0 : 70),
-                    axis: (x: 1, y: 0, z: 0),
-                    anchor: .top,
-                    perspective: 0.5
-                )
+                .rotation3DEffect(.degrees(showGreeting ? 0 : 70), axis: (x: 1, y: 0, z: 0), anchor: .top, perspective: 0.5)
                 .opacity(showGreeting ? 1 : 0)
 
             dateHeader
                 .offset(y: showGreeting ? 78 : 0)
-                .rotation3DEffect(
-                    .degrees(showGreeting ? -70 : 0),
-                    axis: (x: 1, y: 0, z: 0),
-                    anchor: .bottom,
-                    perspective: 0.5
-                )
+                .rotation3DEffect(.degrees(showGreeting ? -70 : 0), axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.5)
                 .opacity(showGreeting ? 0 : 1)
         }
-        .frame(height: 78, alignment: .topLeading)
+        .frame(height: 64, alignment: .topLeading)
         .clipped()
         .onAppear {
             guard showGreeting else { return }
@@ -107,56 +83,77 @@ struct TodayView: View {
     }
 
     private var greetingHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text(greeting.emoji)
-                    .font(.system(size: 14))
+                Text(greeting.emoji).font(.system(size: 13))
                 Text(greeting.label)
                     .font(.system(size: 10, weight: .bold))
                     .tracking(1.4)
                     .foregroundStyle(.tertiary)
             }
             Text(greeting.headline)
-                .font(.system(size: 28, weight: .bold))
+                .font(.system(size: 25, weight: .bold))
             Text(progressLine)
-                .font(.system(size: 13))
+                .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
     }
 
     private var dateHeader: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("TODAY")
                     .font(.system(size: 10, weight: .bold))
                     .tracking(1.4)
                     .foregroundStyle(.tertiary)
                 Text(Self.dayFormatter.string(from: today))
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.system(size: 25, weight: .bold))
                 Text(progressLine)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(store.cautionActive ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
             }
             Spacer()
-            if store.dayClosedToday {
-                Label("Flight closed", systemImage: "airplane.arrival")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.tertiary)
-            } else {
-                Button {
-                    showPostflight = true
-                } label: {
-                    Label("Close the day", systemImage: "airplane.arrival")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
+            closeDayControl
         }
     }
 
-    private var subtitle: String {
-        "\(store.completedTodayCount)/\(store.totalTodayCount) done  •  \(formatMinutes(minutesLeft)) left"
+    @ViewBuilder
+    private var closeDayControl: some View {
+        if store.dayClosedToday {
+            Label("Flight closed", systemImage: "airplane.arrival")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.tertiary)
+        } else {
+            Button { showPostflight = true } label: {
+                Label("Close the day", systemImage: "airplane.arrival")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+
+    // MARK: - Bottom bar
+
+    private var bottomBar: some View {
+        HStack(spacing: 12) {
+            AddTaskView(store: store, compact: false)
+
+            if let s = store.lastGoAround {
+                Text("\(s.kept) kept · \(s.diverted) diverted")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .transition(.opacity)
+            }
+
+            Button { store.goAround() } label: {
+                Label("Go-Around", systemImage: "arrow.uturn.up")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .help("Repack what's left of today from now; divert the rest to tomorrow (⌃⌥G)")
+        }
     }
 
     private var progressLine: String {
@@ -164,17 +161,17 @@ struct TodayView: View {
         let total = store.totalTodayCount
         if total == 0 { return "No tasks scheduled. Add one to get rolling." }
         if done == total { return "All clear. Day's done." }
-        return "\(done) of \(total) shipped  •  \(formatMinutes(minutesLeft)) of work left"
+        if store.cautionActive {
+            return "\(done) of \(total) shipped · wheels down \(Self.eta.string(from: store.wheelsDownDate)) — over capacity"
+        }
+        return "\(done) of \(total) shipped · \(DurationParser.format(minutes: store.queue.todayEffort)) of work left"
     }
 
-    private func formatMinutes(_ m: Int) -> String {
-        if m == 0 { return "0m" }
-        let h = m / 60
-        let mm = m % 60
-        if h == 0 { return "\(mm)m" }
-        if mm == 0 { return "\(h)h" }
-        return "\(h)h \(mm)m"
-    }
+    private static let eta: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "H:mm"
+        return f
+    }()
 }
 
 struct Greeting {

@@ -3,14 +3,14 @@ import AppKit
 
 enum SidebarTab: String, CaseIterable {
     case today = "Today"
-    case runway = "Runway"
+    case ideas = "Ideas"
     case flightLog = "Flight Log"
     case settings = "Settings"
 
     var icon: String {
         switch self {
         case .today: return "sun.max.fill"
-        case .runway: return "airplane.departure"
+        case .ideas: return "lightbulb.fill"
         case .flightLog: return "book.closed.fill"
         case .settings: return "gearshape.fill"
         }
@@ -19,7 +19,7 @@ enum SidebarTab: String, CaseIterable {
     var accent: Color {
         switch self {
         case .today: return .orange
-        case .runway: return .accentColor
+        case .ideas: return .yellow
         case .flightLog: return .indigo
         case .settings: return .secondary
         }
@@ -40,7 +40,17 @@ struct MainWindowView: View {
                 .navigationTitle("")
         }
         .frame(minWidth: 980, minHeight: 600)
-        .onAppear { store.start() }
+        .onAppear {
+            store.start()
+            consumeRoute()
+        }
+        .onChange(of: store.route) { _, _ in consumeRoute() }
+    }
+
+    private func consumeRoute() {
+        guard let tab = store.route else { return }
+        withAnimation(.easeInOut(duration: 0.15)) { selectedTab = tab }
+        store.route = nil
     }
 
     private var sidebar: some View {
@@ -167,8 +177,8 @@ struct MainWindowView: View {
         switch selectedTab {
         case .today:
             TodayView(store: store)
-        case .runway:
-            RunwayDashboardView(store: store)
+        case .ideas:
+            IdeasView(store: store)
         case .flightLog:
             FlightLogView(store: store)
         case .settings:

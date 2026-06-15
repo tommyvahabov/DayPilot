@@ -31,7 +31,7 @@ struct TaskSectionView: View {
 
     var body: some View {
         if !items.isEmpty || !collapsible {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
                 header
 
                 if showProgress {
@@ -41,34 +41,24 @@ struct TaskSectionView: View {
 
                 if isExpanded {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        TaskRowView(index: index + 1, item: item, compact: compact, onComplete: {
-                            store.completeTask(item)
-                        }, onUncomplete: {
-                            store.uncompleteTask(item)
-                        }, onNotesChanged: { notes in
-                            store.updateNotes(for: item, notes: notes)
-                        }, onEdit: { title, project, effort, deadline in
-                            store.updateTask(item, title: title, project: project, effort: effort, deadline: deadline)
-                        }, onDelete: {
-                            store.removeTask(item)
-                        })
-                        .draggable(item.id.uuidString) {
-                            Text(item.title)
-                                .padding(8)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                        }
-                        .dropDestination(for: String.self) { droppedIDs, _ in
-                            guard let droppedID = droppedIDs.first,
-                                  let droppedUUID = UUID(uuidString: droppedID),
-                                  items.contains(where: { $0.id == droppedUUID }) else {
-                                return false
+                        TaskCardView(store: store, item: item, compact: true)
+                            .draggable(item.id.uuidString) {
+                                Text(item.title)
+                                    .padding(8)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
-                            withAnimation {
-                                store.moveTask(id: droppedUUID, toIndex: index, in: section)
+                            .dropDestination(for: String.self) { droppedIDs, _ in
+                                guard let droppedID = droppedIDs.first,
+                                      let droppedUUID = UUID(uuidString: droppedID),
+                                      items.contains(where: { $0.id == droppedUUID }) else {
+                                    return false
+                                }
+                                withAnimation {
+                                    store.moveTask(id: droppedUUID, toIndex: index, in: section)
+                                }
+                                return true
                             }
-                            return true
-                        }
                     }
                 }
             }
