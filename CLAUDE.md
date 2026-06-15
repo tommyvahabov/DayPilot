@@ -44,7 +44,11 @@ The app reads these fields:
 
 ## todos.md format
 Each task:
-- [ ] Task name | project: QuizPilot | effort: 30m | deadline: 2026-03-20
+- [ ] Task name | project: QuizPilot | effort: 30m | deadline: 2026-03-20 | priority: 1
+
+`priority: 1|2|3` (1 = highest) is optional and per-task; it overrides the
+project's priority in the scheduler's sort (deadline > priority > file order).
+Attachments ride on the line as `attach: relative/path; other/path`.
 
 Completed:
 - [x] Task name

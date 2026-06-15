@@ -15,6 +15,7 @@ struct TaskEditorSheet: View {
     @State private var effort: String
     @State private var deadline: Date?
     @State private var deferUntil: Date?
+    @State private var priority: Int?
     @State private var notes: String
     @State private var attachments: [Attachment]
     /// Attachments imported during this session — deleted on cancel since they
@@ -36,6 +37,7 @@ struct TaskEditorSheet: View {
         _effort = State(initialValue: DurationParser.format(minutes: item.effortMinutes))
         _deadline = State(initialValue: item.deadline)
         _deferUntil = State(initialValue: item.deferUntil)
+        _priority = State(initialValue: item.priority)
         _notes = State(initialValue: item.notes.joined(separator: "\n"))
         _attachments = State(initialValue: item.attachments)
     }
@@ -48,6 +50,7 @@ struct TaskEditorSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     titleField
                     projectField
+                    priorityField
                     effortField
                     dateField(title: "Due", icon: "flag.fill", date: $deadline, accent: .orange)
                     dateField(title: "Snooze", icon: "moon.zzz.fill", date: $deferUntil, accent: .indigo, includeToday: false)
@@ -137,6 +140,20 @@ struct TaskEditorSheet: View {
                     .font(.system(size: 12))
                     .padding(8)
                     .background(fieldBackground)
+            }
+        }
+    }
+
+    private var priorityField: some View {
+        fieldGroup("Priority") {
+            HStack(spacing: 8) {
+                chip("None", selected: priority == nil, color: .gray) { priority = nil }
+                ForEach(PriorityStyle.levels, id: \.self) { p in
+                    chip(PriorityStyle.name(p), selected: priority == p, color: PriorityStyle.color(p)) {
+                        priority = (priority == p) ? nil : p
+                    }
+                }
+                Spacer()
             }
         }
     }
@@ -308,6 +325,7 @@ struct TaskEditorSheet: View {
             effort: effort,
             deadline: deadline.map { Self.iso.string(from: $0) } ?? "",
             deferUntil: deferUntil.map { Self.iso.string(from: $0) } ?? "",
+            priority: priority,
             notes: notes
                 .split(separator: "\n", omittingEmptySubsequences: false)
                 .map { String($0) }

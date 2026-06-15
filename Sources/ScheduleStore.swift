@@ -294,6 +294,7 @@ final class ScheduleStore {
         effort: String,
         deadline: String,
         deferUntil: String,
+        priority: Int?,
         notes: [String],
         attachments: [Attachment]
     ) {
@@ -306,6 +307,7 @@ final class ScheduleStore {
         let fields: [(String, String)] = [
             ("project", project), ("effort", effort),
             ("deadline", deadline), ("defer", deferUntil),
+            ("priority", priority.map(String.init) ?? ""),
         ]
         for (key, raw) in fields {
             let value = raw.trimmingCharacters(in: .whitespaces)

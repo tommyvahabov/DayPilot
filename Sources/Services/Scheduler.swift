@@ -1,18 +1,25 @@
 import Foundation
 
 enum Scheduler {
-    /// deadline > project priority > file order (so manual reordering survives
+    /// deadline > priority > file order (so manual reordering survives
     /// recomputes — effort used to be the tiebreak, which stomped user intent).
+    /// Priority is the task's own when set, otherwise its project's.
     private static func lessThan(_ a: TodoItem, _ b: TodoItem, context: MemoryContext) -> Bool {
         let aDeadline = a.deadline ?? Date.distantFuture
         let bDeadline = b.deadline ?? Date.distantFuture
         if aDeadline != bDeadline { return aDeadline < bDeadline }
 
-        let aPriority = context.priority(for: a.project)
-        let bPriority = context.priority(for: b.project)
+        let aPriority = effectivePriority(a, context: context)
+        let bPriority = effectivePriority(b, context: context)
         if aPriority != bPriority { return aPriority < bPriority }
 
         return a.lineIndex < b.lineIndex
+    }
+
+    /// The task's explicit priority if set, else the project's priority, else
+    /// "lowest" (Int.max) so unprioritized tasks sort last among equals.
+    static func effectivePriority(_ item: TodoItem, context: MemoryContext) -> Int {
+        item.priority ?? context.priority(for: item.project)
     }
 
     /// Estimate × the project's calibration multiplier (Claude-maintained, from
@@ -82,9 +89,13 @@ enum Scheduler {
         if let deadline = item.deadline {
             parts.append("deadline \(deadlineFormatter.string(from: deadline))")
         }
-        let priority = context.priority(for: item.project)
-        if priority != Int.max, let project = item.project {
-            parts.append("P\(priority) \(project)")
+        if let taskPriority = item.priority {
+            parts.append("P\(taskPriority)")
+        } else {
+            let priority = context.priority(for: item.project)
+            if priority != Int.max, let project = item.project {
+                parts.append("P\(priority) \(project)")
+            }
         }
         if effort != item.effortMinutes {
             let mult = context.calibrationMultiplier(for: item.project)

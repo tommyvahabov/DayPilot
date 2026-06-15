@@ -137,6 +137,19 @@ struct TaskCardView: View {
 
     private var metaChips: [MetaChip] {
         var chips: [MetaChip] = []
+        if let p = item.priority {
+            chips.append(MetaChip(id: "priority", view: AnyView(
+                HStack(spacing: 2.5) {
+                    Image(systemName: "flag.fill").font(.system(size: 8))
+                    Text(PriorityStyle.badge(p)).font(.system(size: 9.5, weight: .bold))
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(PriorityStyle.color(p).opacity(0.16))
+                .foregroundStyle(PriorityStyle.color(p))
+                .clipShape(Capsule())
+            )))
+        }
         if let project = item.project {
             chips.append(MetaChip(id: "project", view: AnyView(
                 Text(project)
@@ -153,7 +166,7 @@ struct TaskCardView: View {
         )))
         if let deadline = item.deadline {
             chips.append(MetaChip(id: "deadline", view: AnyView(
-                metaLabel(deadlineText(deadline), system: "flag.fill")
+                metaLabel(deadlineText(deadline), system: "calendar")
                     .foregroundStyle(deadlineColor(deadline))
             )))
         }

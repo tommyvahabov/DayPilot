@@ -137,10 +137,15 @@ enum TodoParser {
         var carried = 0
         var addedBy: String?
         var attachments: [Attachment] = []
+        var priority: Int?
 
         for part in parts.dropFirst() {
             let lower = part.lowercased()
-            if lower.hasPrefix("attach:") {
+            if lower.hasPrefix("priority:") {
+                let val = part.dropFirst(9).trimmingCharacters(in: .whitespaces)
+                // Accept "1"/"2"/"3" or "p1"/"P2" forms.
+                priority = Int(val.lowercased().replacingOccurrences(of: "p", with: "")).map { min(max($0, 1), 3) }
+            } else if lower.hasPrefix("attach:") {
                 let val = part.dropFirst(7).trimmingCharacters(in: .whitespaces)
                 attachments = val
                     .split(separator: ";")
@@ -173,6 +178,7 @@ enum TodoParser {
             deadline: deadline,
             isCompleted: completed,
             lineIndex: lineIndex,
+            priority: priority,
             attachments: attachments,
             deferUntil: deferUntil,
             carried: carried,

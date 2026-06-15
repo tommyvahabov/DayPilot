@@ -8,6 +8,7 @@ struct AddTaskView: View {
     @State private var project = ""
     @State private var effort = ""
     @State private var deadline = ""
+    @State private var priority: Int? = nil
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -67,8 +68,17 @@ struct AddTaskView: View {
             }
 
             chipRow(label: "Project", chips: projectChips, trailing: AnyView(newProjectControl))
+            chipRow(label: "Priority", chips: priorityChips, trailing: nil)
             chipRow(label: "Effort", chips: effortChips, trailing: nil)
             chipRow(label: "Due", chips: deadlineChips, trailing: nil)
+        }
+    }
+
+    private var priorityChips: [ChipModel] {
+        PriorityStyle.levels.map { p in
+            ChipModel(label: "P\(p)", isSelected: priority == p) {
+                priority = (priority == p) ? nil : p
+            }
         }
     }
 
@@ -167,11 +177,13 @@ struct AddTaskView: View {
         project = ""
         effort = ""
         deadline = ""
+        priority = nil
     }
 
     private var selectedSummary: String {
         var parts: [String] = []
         if !project.isEmpty { parts.append(project) }
+        if let priority { parts.append("P\(priority)") }
         if !effort.isEmpty { parts.append(effort) }
         if !deadline.isEmpty {
             let today = Self.isoFormatter.string(from: Date())
@@ -190,6 +202,7 @@ struct AddTaskView: View {
         if !project.isEmpty { raw += " | project: \(project)" }
         if !effort.isEmpty { raw += " | effort: \(effort)" }
         if !deadline.isEmpty { raw += " | deadline: \(deadline)" }
+        if let priority { raw += " | priority: \(priority)" }
         if !project.isEmpty { store.saveProjectIfNew(project) }
         store.addTask(raw: raw)
         title = ""
@@ -220,6 +233,16 @@ struct AddTaskView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 160)
 
+            Menu {
+                Button("None") { priority = nil }
+                ForEach(PriorityStyle.levels, id: \.self) { p in
+                    Button("\(PriorityStyle.name(p)) (P\(p))") { priority = p }
+                }
+            } label: {
+                Label(priority.map { "P\($0)" } ?? "Priority", systemImage: "flag")
+            }
+            .frame(width: 110)
+
             Button("Add") { add() }
                 .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
         }
@@ -237,12 +260,15 @@ struct AddTaskView: View {
         if !proj.isEmpty { raw += " | project: \(proj)" }
         if !eff.isEmpty { raw += " | effort: \(eff)" }
         if !dl.isEmpty { raw += " | deadline: \(dl)" }
+        if let priority { raw += " | priority: \(priority)" }
+        if !proj.isEmpty { store.saveProjectIfNew(proj) }
 
         store.addTask(raw: raw)
         title = ""
         project = ""
         effort = ""
         deadline = ""
+        priority = nil
     }
 
 }
