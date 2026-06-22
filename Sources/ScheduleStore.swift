@@ -20,6 +20,17 @@ final class ScheduleStore {
     /// cleared by MainWindowView.
     var route: SidebarTab?
 
+    /// CoPilot: fired with a collab id the moment its accepted task's line flips
+    /// [ ]→[x] in todos.md — the zero-click "done" signal. Set by PeerManager,
+    /// which relays it back to whoever sent the task. Detection rides the
+    /// existing FileWatcher → recompute path, so there's no second watcher on
+    /// todos.md (which would race the atomic-write handling in FileWatcher).
+    var onCollabTaskDone: ((UUID) -> Void)?
+
+    /// Snapshot of todos.md lines from the previous recompute, for collab flip
+    /// detection. nil until the first recompute (so we never fire on launch).
+    private var previousTodoLines: [String]?
+
     private var fileWatcher: FileWatcher?
     private let schedulerDir: String
     private let git: GitService
@@ -123,7 +134,14 @@ final class ScheduleStore {
 
         do {
             let todoContent = try String(contentsOfFile: todosPath, encoding: .utf8)
-            rawTodoLines = todoContent.components(separatedBy: .newlines)
+            let newLines = todoContent.components(separatedBy: .newlines)
+            // Spot collab tasks that just got ticked off, before we overwrite the
+            // snapshot. First recompute compares against itself → no flips.
+            let doneCollabIDs = CollabBridge.newlyCompletedCollabIDs(
+                old: previousTodoLines ?? newLines, new: newLines
+            )
+            previousTodoLines = newLines
+            rawTodoLines = newLines
             let todos = TodoParser.parse(lines: rawTodoLines)
             let allTodos = TodoParser.parseAll(lines: rawTodoLines)
             let completed = allTodos.filter { $0.isCompleted }
@@ -147,8 +165,43 @@ final class ScheduleStore {
             totalTodayCount = todayStats.count + queue.today.count
             doneLog = parseDoneLog()
             ideas = readIdeas()
+            for id in doneCollabIDs { onCollabTaskDone?(id) }
         } catch {
             errorMessage = "Failed to read files: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - CoPilot
+
+    /// Land an accepted shared task in todos.md as a line that reads exactly like
+    /// a hand-written one (plus the hidden `collab:` tag). Goes through the same
+    /// writeBack/recompute/git path as every other edit so the file watcher,
+    /// auto-commit, and done-detection all stay consistent.
+    func appendSharedTask(_ task: SharedTask) {
+        fileWatcher?.isSelfEditing = true
+        rawTodoLines.append(CollabBridge.todoLine(for: task))
+        for note in CollabBridge.notes(for: task) {
+            rawTodoLines.append("  \(note)")
+        }
+        writeBack()
+        recompute()
+    }
+
+    /// Tick off a collab task by its tracking id (the CoPilot inbox "Done"
+    /// button). Routes through the same checkbox flip that the FSEvents watcher
+    /// catches, so the "done" ack is sent down one path whether the coworker
+    /// checks the box in DayPilot or taps Done in CoPilot.
+    func completeCollabTask(id: UUID) {
+        for (i, line) in rawTodoLines.enumerated() {
+            guard line.trimmingCharacters(in: .whitespaces).hasPrefix("- [ ] "),
+                  CollabBridge.collabID(from: line) == id else { continue }
+            let item = TodoParser.parse(lines: [line]).first
+            fileWatcher?.isSelfEditing = true
+            TodoParser.markComplete(lines: &rawTodoLines, at: i)
+            writeBack()
+            if let item { logCompletion(item) }
+            recompute()
+            return
         }
     }
 

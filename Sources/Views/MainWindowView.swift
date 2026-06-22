@@ -3,6 +3,7 @@ import AppKit
 
 enum SidebarTab: String, CaseIterable {
     case today = "Today"
+    case copilot = "CoPilot"
     case ideas = "Ideas"
     case flightLog = "Flight Log"
     case settings = "Settings"
@@ -10,6 +11,7 @@ enum SidebarTab: String, CaseIterable {
     var icon: String {
         switch self {
         case .today: return "sun.max.fill"
+        case .copilot: return "person.2.fill"
         case .ideas: return "lightbulb.fill"
         case .flightLog: return "book.closed.fill"
         case .settings: return "gearshape.fill"
@@ -19,6 +21,7 @@ enum SidebarTab: String, CaseIterable {
     var accent: Color {
         switch self {
         case .today: return .orange
+        case .copilot: return .teal
         case .ideas: return .yellow
         case .flightLog: return .indigo
         case .settings: return .secondary
@@ -29,6 +32,7 @@ enum SidebarTab: String, CaseIterable {
 struct MainWindowView: View {
     @Bindable var store: ScheduleStore
     @Bindable var updateChecker: UpdateChecker
+    @Bindable var peers: PeerManager
     @State private var selectedTab: SidebarTab = .today
 
     var body: some View {
@@ -42,6 +46,7 @@ struct MainWindowView: View {
         .frame(minWidth: 980, minHeight: 600)
         .onAppear {
             store.start()
+            peers.attach(to: store)
             consumeRoute()
         }
         .onChange(of: store.route) { _, _ in consumeRoute() }
@@ -64,7 +69,8 @@ struct MainWindowView: View {
 
             VStack(spacing: 2) {
                 ForEach(SidebarTab.allCases, id: \.self) { tab in
-                    SidebarRow(tab: tab, isSelected: selectedTab == tab) {
+                    SidebarRow(tab: tab, isSelected: selectedTab == tab,
+                               badge: tab == .copilot ? peers.unreadCount : 0) {
                         withAnimation(.easeInOut(duration: 0.15)) {
                             selectedTab = tab
                         }
@@ -177,6 +183,8 @@ struct MainWindowView: View {
         switch selectedTab {
         case .today:
             TodayView(store: store)
+        case .copilot:
+            CollabView(store: store, peers: peers)
         case .ideas:
             IdeasView(store: store)
         case .flightLog:
@@ -190,6 +198,7 @@ struct MainWindowView: View {
 private struct SidebarRow: View {
     let tab: SidebarTab
     let isSelected: Bool
+    var badge: Int = 0
     let action: () -> Void
 
     @State private var hovering = false
@@ -207,6 +216,15 @@ private struct SidebarRow: View {
                     .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
 
                 Spacer()
+
+                if badge > 0 {
+                    Text("\(badge)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.red))
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)

@@ -44,6 +44,7 @@ struct DayPilotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = ScheduleStore()
     @State private var updateChecker = UpdateChecker()
+    @State private var peerManager = PeerManager()
 
     static let menubarImage: NSImage? = {
         guard let url = Bundle.main.url(forResource: "MenubarIcon@2x", withExtension: "png"),
@@ -68,7 +69,7 @@ struct DayPilotApp: App {
         .menuBarExtraStyle(.window)
 
         Window("DayPilot", id: "main-window") {
-            MainWindowView(store: store, updateChecker: updateChecker)
+            MainWindowView(store: store, updateChecker: updateChecker, peers: peerManager)
                 .task {
                     await updateChecker.check()
                 }

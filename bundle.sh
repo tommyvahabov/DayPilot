@@ -48,6 +48,13 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
     <string>14.0</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>DayPilot CoPilot hands off tasks directly to coworkers' Macs on your local network. Nothing leaves the network — no cloud, no servers.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_dpcollab._tcp</string>
+        <string>_dpcollab._udp</string>
+    </array>
 </dict>
 </plist>
 PLIST
