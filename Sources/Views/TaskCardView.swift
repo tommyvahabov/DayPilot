@@ -9,6 +9,10 @@ struct TaskCardView: View {
     let item: TodoItem
     var compact: Bool = false
 
+    /// Injected at the scene root so any card can hand its task to a coworker
+    /// without threading the peer manager through the whole board.
+    @Environment(PeerManager.self) private var peers
+
     @State private var isExpanded = false
     @State private var showEditor = false
 
@@ -255,6 +259,7 @@ struct TaskCardView: View {
             Button { triggerComplete() } label: { Label("Complete", systemImage: "checkmark.circle") }
         }
         Button { showEditor = true } label: { Label("Edit…", systemImage: "square.and.pencil") }
+        handoffMenu
         if !item.attachments.isEmpty {
             Button { for a in item.attachments { AttachmentService.open(a) } } label: {
                 Label("Open attachments", systemImage: "paperclip")
@@ -262,6 +267,24 @@ struct TaskCardView: View {
         }
         Divider()
         Button(role: .destructive) { store.removeTask(item) } label: { Label("Delete", systemImage: "trash") }
+    }
+
+    /// "Hand off to…" — send this existing task to a connected coworker (CoPilot).
+    /// Shown only when there's someone to hand it to and the task is still open.
+    @ViewBuilder
+    private var handoffMenu: some View {
+        let connected = peers.peers.filter { $0.connection == .connected }
+        if !item.isCompleted && !connected.isEmpty {
+            Menu {
+                ForEach(connected) { peer in
+                    Button(peer.displayName) {
+                        peers.send(CollabBridge.sharedTask(from: item), to: peer.displayName)
+                    }
+                }
+            } label: {
+                Label("Hand off to…", systemImage: "paperplane")
+            }
+        }
     }
 
     // MARK: - Behaviour

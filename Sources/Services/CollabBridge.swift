@@ -30,6 +30,32 @@ enum CollabBridge {
         return parts.joined(separator: " | ")
     }
 
+    /// Turn one of your own tasks into a `SharedTask` to hand off to a coworker.
+    /// A fresh collab id is minted (this is a new shared instance); `from` is
+    /// left for the sender to stamp at send time. CONTEXT note prefixes are
+    /// stripped so they don't double up when the recipient re-renders them.
+    static func sharedTask(from item: TodoItem) -> SharedTask {
+        let note = item.notes
+            .map(stripContextPrefix)
+            .filter { !$0.isEmpty }
+            .joined(separator: "; ")
+        return SharedTask(
+            title: item.title,
+            project: item.project,
+            effortMinutes: item.effortMinutes,
+            priority: item.priority,
+            note: note.isEmpty ? nil : note
+        )
+    }
+
+    private static func stripContextPrefix(_ line: String) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.lowercased().hasPrefix("context:") {
+            return String(trimmed.dropFirst("context:".count)).trimmingCharacters(in: .whitespaces)
+        }
+        return trimmed
+    }
+
     /// The indented note block for an accepted task — the `note` becomes a
     /// `CONTEXT:` line, matching how context notes already read in todos.md.
     static func notes(for task: SharedTask) -> [String] {

@@ -61,6 +61,7 @@ struct DayPilotApp: App {
     var body: some Scene {
         MenuBarExtra {
             ScheduleView(store: store)
+                .environment(peerManager)
                 .modifier(WindowOpenerBinder())
         } label: {
             MenubarHUDLabel(store: store)
@@ -70,6 +71,7 @@ struct DayPilotApp: App {
 
         Window("DayPilot", id: "main-window") {
             MainWindowView(store: store, updateChecker: updateChecker, peers: peerManager)
+                .environment(peerManager)
                 .task {
                     await updateChecker.check()
                 }

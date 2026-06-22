@@ -58,6 +58,50 @@ struct CollabBridgeSerializeTests {
     }
 }
 
+@Suite("CollabBridge — hand off an existing task")
+struct CollabBridgeHandoffTests {
+    @Test func mapsTodoItemFieldsToSharedTask() {
+        let item = TodoItem(title: "Fix timeout", project: "AvtoPilot",
+                            effortMinutes: 60,
+                            notes: ["CONTEXT: see Sentry #412"], priority: 1)
+        let task = CollabBridge.sharedTask(from: item)
+        #expect(task.title == "Fix timeout")
+        #expect(task.project == "AvtoPilot")
+        #expect(task.effortMinutes == 60)
+        #expect(task.priority == 1)
+        #expect(task.note == "see Sentry #412")  // CONTEXT: prefix stripped
+        #expect(task.from == nil)                 // sender stamps this at send time
+    }
+
+    @Test func freshTaskHasNoNoteOrProject() {
+        let item = TodoItem(title: "Quick thing", effortMinutes: 15)
+        let task = CollabBridge.sharedTask(from: item)
+        #expect(task.project == nil)
+        #expect(task.note == nil)
+        #expect(task.effortMinutes == 15)
+    }
+
+    @Test func joinsMultipleNotesStrippingContextPrefixes() {
+        let item = TodoItem(title: "T", notes: ["CONTEXT: a", "b"])
+        #expect(CollabBridge.sharedTask(from: item).note == "a; b")
+    }
+
+    @Test func eachHandoffGetsAFreshCollabID() {
+        let item = TodoItem(title: "T")
+        #expect(CollabBridge.sharedTask(from: item).id != CollabBridge.sharedTask(from: item).id)
+    }
+
+    @Test func handedOffTaskSerializesToACleanCollabLine() {
+        // The whole loop: existing task → SharedTask → todos.md line the
+        // recipient sees, with a CONTEXT note and no doubled prefix.
+        let item = TodoItem(title: "Ship", project: "DayPilot", effortMinutes: 30,
+                            notes: ["CONTEXT: do it"])
+        let task = CollabBridge.sharedTask(from: item)
+        #expect(CollabBridge.notes(for: task) == ["CONTEXT: do it"])
+        #expect(CollabBridge.collabID(from: CollabBridge.todoLine(for: task)) == task.id)
+    }
+}
+
 @Suite("CollabBridge collab id extraction")
 struct CollabBridgeIDTests {
     @Test func findsTheCollabToken() {
