@@ -60,6 +60,9 @@ final class PeerManager: NSObject {
     @ObservationIgnored private var peerIDs: [String: MCPeerID] = [:]
     /// Held invitation responders for untrusted peers, until the user decides.
     @ObservationIgnored private var invitationResponders: [String: (Bool, MCSession?) -> Void] = [:]
+    /// Peers we've sent an invitation to and are awaiting a verdict from. Used to
+    /// detect simultaneous invites and resolve the collision deterministically.
+    @ObservationIgnored private var outgoingInvites: Set<String> = []
     /// The todos.md owner — appends accepted tasks, reports checkbox flips back.
     @ObservationIgnored private weak var store: ScheduleStore?
     @ObservationIgnored private var attached = false
@@ -108,13 +111,26 @@ final class PeerManager: NSObject {
 
     /// Invite a discovered peer to pair (first-time handshake).
     func pair(with displayName: String) {
+        // If they already invited us, accept theirs instead of opening a second
+        // channel (that's what causes the never-connects collision).
+        if let responder = invitationResponders.removeValue(forKey: displayName) {
+            pendingInvites.removeAll { $0.id == displayName }
+            setConnection(displayName, .connecting)
+            responder(true, session)
+            logger.info("pair \(displayName, privacy: .public): accepted their pending invite")
+            return
+        }
         guard let peerID = peerIDs[displayName] else { return }
-        browser.invitePeer(peerID, to: session, withContext: nil, timeout: 30)
+        outgoingInvites.insert(displayName)
+        browser.invitePeer(peerID, to: session, withContext: nil, timeout: 60)
         setConnection(displayName, .connecting)
+        logger.info("pair \(displayName, privacy: .public): invitation sent")
     }
 
     /// Accept an incoming pairing request.
     func acceptInvite(_ invite: PendingInvite) {
+        outgoingInvites.remove(invite.displayName)
+        setConnection(invite.displayName, .connecting)
         invitationResponders.removeValue(forKey: invite.displayName)?(true, session)
         pendingInvites.removeAll { $0.id == invite.id }
     }
@@ -229,9 +245,11 @@ final class PeerManager: NSObject {
     }
 
     private func handleConnection(_ displayName: String, _ peerID: MCPeerID, _ state: MCSessionState) {
+        logger.info("session \(displayName, privacy: .public) state=\(state.rawValue)")
         switch state {
         case .connected:
             peerIDs[displayName] = peerID
+            outgoingInvites.remove(displayName)
             setConnection(displayName, .connected)
             // First connection only happens after a human paired on both ends,
             // so it's safe to remember the peer for silent reconnect.
@@ -243,6 +261,10 @@ final class PeerManager: NSObject {
         case .connecting:
             setConnection(displayName, .connecting)
         case .notConnected:
+            outgoingInvites.remove(displayName)
+            // A declined duplicate invite (from the collision tiebreak) fires
+            // .notConnected even while the real channel is up — don't clobber it.
+            if session.connectedPeers.contains(where: { $0.displayName == displayName }) { return }
             if peers.contains(where: { $0.id == displayName }) {
                 setConnection(displayName, .discovered)
             }
@@ -264,20 +286,32 @@ final class PeerManager: NSObject {
 
     private func handleLostPeer(_ displayName: String) {
         peerIDs.removeValue(forKey: displayName)
+        outgoingInvites.remove(displayName)
         if session.connectedPeers.contains(where: { $0.displayName == displayName }) { return }
         peers.removeAll { $0.id == displayName }
     }
 
     private func handleInvitation(_ displayName: String,
                                   _ responder: @escaping (Bool, MCSession?) -> Void) {
-        if trusted.contains(displayName) {
-            responder(true, session)                 // known peer → silent accept
-            return
-        }
-        invitationResponders[displayName] = responder
-        upsertPeer(displayName, connection: .discovered)
-        if !pendingInvites.contains(where: { $0.id == displayName }) {
-            pendingInvites.append(PendingInvite(displayName: displayName))
+        let decision = PairingResolver.decide(
+            from: displayName, localName: localName,
+            trusted: trusted.contains(displayName),
+            hasOutgoingInvite: outgoingInvites.contains(displayName)
+        )
+        logger.info("invitation from \(displayName, privacy: .public) -> \(String(describing: decision), privacy: .public)")
+        switch decision {
+        case .autoAccept, .acceptIncoming:
+            outgoingInvites.remove(displayName)
+            setConnection(displayName, .connecting)
+            responder(true, session)
+        case .rejectIncoming:
+            responder(false, nil)                    // ours wins; theirs declined
+        case .prompt:
+            invitationResponders[displayName] = responder
+            upsertPeer(displayName, connection: .discovered)
+            if !pendingInvites.contains(where: { $0.id == displayName }) {
+                pendingInvites.append(PendingInvite(displayName: displayName))
+            }
         }
     }
 
