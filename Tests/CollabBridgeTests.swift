@@ -102,6 +102,28 @@ struct CollabBridgeHandoffTests {
     }
 }
 
+@Suite("CollabBridge — restore a declined handoff")
+struct CollabBridgePlainLineTests {
+    @Test func plainLineDropsCollabAndFromTags() {
+        // A handed-off task that comes back (declined) is mine again — a normal
+        // task line, no collab tracking, no "from".
+        let task = SharedTask(id: UUID(), title: "Back to me", project: "X",
+                              effortMinutes: 30, priority: 2, note: "ctx", from: "Tommy")
+        let line = CollabBridge.plainLine(for: task)
+        #expect(line == "- [ ] Back to me | project: X | effort: 30m | priority: 2")
+        #expect(CollabBridge.collabID(from: line) == nil)
+        #expect(!line.contains("from:"))
+    }
+
+    @Test func plainLineMinimalIsJustTheTitle() {
+        #expect(CollabBridge.plainLine(for: SharedTask(id: UUID(), title: "Just a title")) == "- [ ] Just a title")
+    }
+
+    @Test func plainLineSanitizesTitle() {
+        #expect(CollabBridge.plainLine(for: SharedTask(id: UUID(), title: "a | b")) == "- [ ] a / b")
+    }
+}
+
 @Suite("CollabBridge collab id extraction")
 struct CollabBridgeIDTests {
     @Test func findsTheCollabToken() {

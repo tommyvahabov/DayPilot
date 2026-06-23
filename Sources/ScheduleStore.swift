@@ -187,6 +187,19 @@ final class ScheduleStore {
         recompute()
     }
 
+    /// Put a declined handoff back on my list as a normal task (no collab tag —
+    /// it's mine again). Appends via the standard path so writeBack/recompute/git
+    /// all run.
+    func restoreTask(_ task: SharedTask) {
+        fileWatcher?.isSelfEditing = true
+        rawTodoLines.append(CollabBridge.plainLine(for: task))
+        for note in CollabBridge.notes(for: task) {
+            rawTodoLines.append("  \(note)")
+        }
+        writeBack()
+        recompute()
+    }
+
     /// Tick off a collab task by its tracking id (the CoPilot inbox "Done"
     /// button). Routes through the same checkbox flip that the FSEvents watcher
     /// catches, so the "done" ack is sent down one path whether the coworker

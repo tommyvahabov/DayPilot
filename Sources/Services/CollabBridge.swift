@@ -13,6 +13,23 @@ enum CollabBridge {
     ///
     ///   - [ ] Fix battle protocol timeout | project: AvtoPilot | effort: 1h | from: Tommy | collab: <uuid>
     static func todoLine(for task: SharedTask) -> String {
+        var parts = baseTokens(for: task)
+        if let from = task.from, !from.isEmpty {
+            parts.append("from: \(from)")
+        }
+        parts.append("\(collabKey): \(task.id.uuidString)")
+        return parts.joined(separator: " | ")
+    }
+
+    /// A normal task line with no collab/`from` tags — used when a handed-off
+    /// task is declined and restored to the sender's own list (it's theirs again,
+    /// no longer a tracked handoff).
+    static func plainLine(for task: SharedTask) -> String {
+        baseTokens(for: task).joined(separator: " | ")
+    }
+
+    /// The shared `- [ ] title | project | effort | priority` prefix.
+    private static func baseTokens(for task: SharedTask) -> [String] {
         var parts = ["- [ ] " + TodoParser.sanitizeTitle(task.title)]
         if let project = task.project, !project.isEmpty {
             parts.append("project: \(project)")
@@ -23,11 +40,7 @@ enum CollabBridge {
         if let priority = task.priority {
             parts.append("priority: \(priority)")
         }
-        if let from = task.from, !from.isEmpty {
-            parts.append("from: \(from)")
-        }
-        parts.append("\(collabKey): \(task.id.uuidString)")
-        return parts.joined(separator: " | ")
+        return parts
     }
 
     /// Turn one of your own tasks into a `SharedTask` to hand off to a coworker.

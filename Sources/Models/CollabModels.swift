@@ -98,13 +98,17 @@ struct OutboxItem: Identifiable, Equatable {
     /// Display name of the peer it went to.
     var toPeer: String
     var status: TaskStatus
+    /// True when this was a *delegation* of one of my own tasks (removed from my
+    /// list on handoff) — if the peer declines, restore it to my list.
+    var restoreOnDecline: Bool
 
     var id: UUID { task.id }
 
-    init(task: SharedTask, toPeer: String, status: TaskStatus = .delivered) {
+    init(task: SharedTask, toPeer: String, status: TaskStatus = .delivered, restoreOnDecline: Bool = false) {
         self.task = task
         self.toPeer = toPeer
         self.status = status
+        self.restoreOnDecline = restoreOnDecline
     }
 }
 

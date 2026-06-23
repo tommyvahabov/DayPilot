@@ -278,7 +278,7 @@ struct TaskCardView: View {
             Menu {
                 ForEach(connected) { peer in
                     Button(peer.displayName) {
-                        peers.send(CollabBridge.sharedTask(from: item), to: peer.displayName)
+                        peers.handOff(item, to: peer.displayName)
                     }
                 }
             } label: {

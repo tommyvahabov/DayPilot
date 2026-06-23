@@ -153,17 +153,28 @@ final class PeerManager: NSObject {
     // MARK: - Sending
 
     /// Hand a task to a connected coworker. Stamps the sender name, drops it in
-    /// the outbox as `delivered`.
-    func send(_ task: SharedTask, to displayName: String) {
+    /// the outbox as `delivered`. Returns whether it actually went out.
+    @discardableResult
+    func send(_ task: SharedTask, to displayName: String, restoreOnDecline: Bool = false) -> Bool {
         guard let peerID = session.connectedPeers.first(where: { $0.displayName == displayName }) else {
             logger.error("send: \(displayName, privacy: .public) not connected")
-            return
+            return false
         }
         var task = task
         task.from = localName
-        guard sendMessage(.task(task), to: [peerID]) else { return }
+        guard sendMessage(.task(task), to: [peerID]) else { return false }
         outbox.removeAll { $0.id == task.id }
-        outbox.insert(OutboxItem(task: task, toPeer: displayName, status: .delivered), at: 0)
+        outbox.insert(OutboxItem(task: task, toPeer: displayName, status: .delivered,
+                                 restoreOnDecline: restoreOnDecline), at: 0)
+        return true
+    }
+
+    /// Delegate one of my own tasks: send it, then remove it from my list. If the
+    /// coworker declines, it's restored (see the statusUpdate handling).
+    func handOff(_ item: TodoItem, to displayName: String) {
+        if send(CollabBridge.sharedTask(from: item), to: displayName, restoreOnDecline: true) {
+            store?.removeTask(item)
+        }
     }
 
     // MARK: - Inbox actions
@@ -240,7 +251,12 @@ final class PeerManager: NSObject {
             inbox.insert(InboxItem(task: task, fromPeer: displayName), at: 0)
         case .statusUpdate(let update):
             guard let idx = outbox.firstIndex(where: { $0.id == update.collabID }) else { return }
-            outbox[idx].status = outbox[idx].status.applying(update.status)
+            let was = outbox[idx].status
+            outbox[idx].status = was.applying(update.status)
+            // A delegated task that got declined comes back to my list.
+            if outbox[idx].status == .declined, was != .declined, outbox[idx].restoreOnDecline {
+                store?.restoreTask(outbox[idx].task)
+            }
         }
     }
 
