@@ -5,6 +5,7 @@ let HOME = NSHomeDirectory()
 let TODOS_PATH = "\(HOME)/scheduler/todos.md"
 let MEMORY_PATH = "\(HOME)/scheduler/memory.md"
 let DONE_PATH = "\(HOME)/scheduler/done.md"
+let IDEAS_PATH = "\(HOME)/scheduler/ideas.md"
 let SCHEDULER_DIR = "\(HOME)/scheduler"
 
 func ensureDir() {
@@ -59,33 +60,127 @@ func textContent(_ s: String) -> [String: Any] {
 }
 
 // MARK: - Tool implementations
-func toolListTasks() -> [String: Any] {
+
+/// Drop the noisy `collab:` tracking uuid from a line so the list stays readable.
+func cleanRaw(_ raw: String) -> String {
+    raw.split(separator: "|")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.lowercased().hasPrefix("collab:") }
+        .joined(separator: " | ")
+}
+
+/// A lean overview by default: open (+ proposed) tasks only, one compact line
+/// each, note *counts* rather than bodies. The old dump (every task incl. done,
+/// with every note, as pretty JSON) buried the model. Detail is on demand via
+/// get_task; done tasks via include_done; bodies via include_notes.
+func toolListTasks(_ args: [String: Any]) -> [String: Any] {
+    let includeDone = (args["include_done"] as? Bool) ?? false
+    let includeNotes = (args["include_notes"] as? Bool) ?? false
     let lines = readLines(TODOS_PATH)
-    var tasks: [[String: Any]] = []
+
+    var open: [(String, [String])] = []
+    var proposed: [(String, [String])] = []
+    var done: [(String, [String])] = []
     var i = 0
     while i < lines.count {
         let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
-        if trimmed.hasPrefix("- [ ] ") {
-            let raw = String(trimmed.dropFirst(6))
+        func grab(_ prefix: String) -> (String, [String])? {
+            guard trimmed.hasPrefix(prefix) else { return nil }
             let notes = collectNotes(lines, at: i)
-            tasks.append(["line": i, "status": "open", "raw": raw, "notes": notes])
-            i += notes.count + 1
-        } else if trimmed.hasPrefix("- [x] ") {
-            let raw = String(trimmed.dropFirst(6))
-            let notes = collectNotes(lines, at: i)
-            tasks.append(["line": i, "status": "done", "raw": raw, "notes": notes])
-            i += notes.count + 1
-        } else if trimmed.hasPrefix("- [?] ") {
-            let raw = String(trimmed.dropFirst(6))
-            let notes = collectNotes(lines, at: i)
-            tasks.append(["line": i, "status": "proposed", "raw": raw, "notes": notes])
-            i += notes.count + 1
-        } else {
-            i += 1
+            let entry = (cleanRaw(String(trimmed.dropFirst(prefix.count))), notes)
+            i += notes.count
+            return entry
+        }
+        if let t = grab("- [ ] ") { open.append(t) }
+        else if let t = grab("- [?] ") { proposed.append(t) }
+        else if let t = grab("- [x] ") { done.append(t) }
+        i += 1
+    }
+
+    var out = ""
+    func render(_ heading: String, _ items: [(String, [String])]) {
+        out += "\(heading) (\(items.count)):\n"
+        if items.isEmpty { out += "  (none)\n" }
+        for (raw, notes) in items {
+            out += "- \(raw)"
+            if !notes.isEmpty { out += "  [\(notes.count) note\(notes.count == 1 ? "" : "s")]" }
+            out += "\n"
+            if includeNotes { for n in notes { out += "    \(n)\n" } }
         }
     }
-    let json = toJSON(tasks)
-    return textContent(json)
+
+    render("Open", open)
+    if !proposed.isEmpty { render("Proposed (awaiting human review)", proposed) }
+    if includeDone {
+        render("Done", done)
+    } else if !done.isEmpty {
+        out += "(\(done.count) done hidden — pass include_done:true to show)\n"
+    }
+    if !includeNotes { out += "Use get_task(title) for a task's full notes/context.\n" }
+    return textContent(out)
+}
+
+func toolGetTask(_ args: [String: Any]) -> [String: Any] {
+    guard let title = args["title"] as? String, !title.isEmpty else {
+        return textContent("Error: title is required")
+    }
+    let lines = readLines(TODOS_PATH)
+    guard let i = findTaskIndex(lines, titleSubstring: title) else {
+        return textContent("No task matching \"\(title)\" found")
+    }
+    let raw = cleanRaw(lines[i].trimmingCharacters(in: .whitespaces))
+    let notes = collectNotes(lines, at: i)
+    var out = "\(raw)\n"
+    if notes.isEmpty {
+        out += "(no notes)\n"
+    } else {
+        out += "notes:\n"
+        for n in notes { out += "  - \(n)\n" }
+    }
+    return textContent(out)
+}
+
+func deriveIdeaTitle(_ body: String) -> String {
+    let first = body.split(separator: "\n").first.map(String.init)?
+        .trimmingCharacters(in: .whitespaces) ?? "Untitled"
+    return first.count > 60 ? String(first.prefix(60)).trimmingCharacters(in: .whitespaces) + "…" : first
+}
+
+/// Match IdeasParser: a body line that is itself an entry header would split the
+/// idea on re-parse, so break the match with a zero-width space after `<!--`.
+func escapeIdeaBody(_ body: String) -> String {
+    body.split(separator: "\n", omittingEmptySubsequences: false).map { sub -> String in
+        let line = String(sub)
+        return line.trimmingCharacters(in: .whitespaces).hasPrefix("<!-- id:")
+            ? line.replacingOccurrences(of: "<!--", with: "<!--\u{200B}")
+            : line
+    }.joined(separator: "\n")
+}
+
+func toolAddIdea(_ args: [String: Any]) -> [String: Any] {
+    let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+    let body = (args["body"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if title.isEmpty && body.isEmpty {
+        return textContent("Error: title or body is required")
+    }
+    ensureDir()
+    let finalTitle = title.isEmpty ? deriveIdeaTitle(body) : title
+    let id = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+    let fmt = DateFormatter()
+    fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
+    fmt.locale = Locale(identifier: "en_US_POSIX")
+    let created = fmt.string(from: Date())
+
+    var content: String
+    if let existing = try? String(contentsOfFile: IDEAS_PATH, encoding: .utf8), !existing.isEmpty {
+        content = existing.hasSuffix("\n") ? existing : existing + "\n"
+    } else {
+        content = "# Ideas\n"
+    }
+    content += "\n<!-- id: \(id) created: \(created) -->\n## \(finalTitle)\n"
+    if !body.isEmpty { content += escapeIdeaBody(body) + "\n" }
+    try? content.write(toFile: IDEAS_PATH, atomically: true, encoding: .utf8)
+    return textContent("Idea saved: \(finalTitle)")
 }
 
 func toolAddTask(_ args: [String: Any]) -> [String: Any] {
@@ -332,9 +427,38 @@ struct ToolSpec {
 let tools: [ToolSpec] = [
     ToolSpec(
         name: "list_tasks",
-        description: "List all tasks from ~/scheduler/todos.md (includes notes)",
-        schema: ["type": "object", "properties": [:] as [String: Any]],
-        handler: { _ in toolListTasks() }
+        description: "Lean overview of tasks from ~/scheduler/todos.md: open (and proposed) tasks, one compact line each with note counts (not bodies). Done tasks are hidden by default. Use get_task for a task's full notes/context. Options: include_done (bool), include_notes (bool).",
+        schema: [
+            "type": "object",
+            "properties": [
+                "include_done": ["type": "boolean", "description": "Also list completed tasks (default false)"],
+                "include_notes": ["type": "boolean", "description": "Inline each task's note bodies (default false — counts only)"],
+            ] as [String: Any],
+        ],
+        handler: toolListTasks
+    ),
+    ToolSpec(
+        name: "get_task",
+        description: "Full detail of one task (by title partial match), including all its notes/context. Use after list_tasks when you need a specific task's context.",
+        schema: [
+            "type": "object",
+            "properties": ["title": ["type": "string", "description": "Task title or partial match"]],
+            "required": ["title"],
+        ],
+        handler: toolGetTask
+    ),
+    ToolSpec(
+        name: "add_idea",
+        description: "Capture an idea/note to ~/scheduler/ideas.md (shown in DayPilot's Ideas tab). Use for thoughts that aren't tasks yet. Fields: body (the idea), title (optional — derived from the body if omitted).",
+        schema: [
+            "type": "object",
+            "properties": [
+                "body": ["type": "string", "description": "The idea text (can be multiple lines)"],
+                "title": ["type": "string", "description": "Optional short title; derived from body if omitted"],
+            ] as [String: Any],
+            "required": ["body"],
+        ],
+        handler: toolAddIdea
     ),
     ToolSpec(
         name: "add_task",

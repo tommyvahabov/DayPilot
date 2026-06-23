@@ -4,10 +4,21 @@ import { z } from "zod";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { randomUUID } from "node:crypto";
 
 const TODOS_PATH = join(homedir(), "scheduler", "todos.md");
 const MEMORY_PATH = join(homedir(), "scheduler", "memory.md");
 const DONE_PATH = join(homedir(), "scheduler", "done.md");
+const IDEAS_PATH = join(homedir(), "scheduler", "ideas.md");
+
+// Drop the noisy collab: tracking uuid so task lists stay readable.
+function cleanRaw(raw) {
+  return raw
+    .split("|")
+    .map((s) => s.trim())
+    .filter((s) => !s.toLowerCase().startsWith("collab:"))
+    .join(" | ");
+}
 
 function ensureDir() {
   const dir = join(homedir(), "scheduler");
@@ -55,26 +66,72 @@ const server = new McpServer({
   version: "1.1.0",
 });
 
-// List all tasks (with notes)
-server.tool("list_tasks", "List all tasks from ~/scheduler/todos.md (includes notes)", {}, () => {
-  const lines = readLines();
-  const tasks = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const openMatch = line.match(/^- \[ \] (.+)/);
-    const doneMatch = line.match(/^- \[x\] (.+)/);
-    if (openMatch) {
-      const notes = collectNotes(lines, i);
-      tasks.push({ line: i, status: "open", raw: openMatch[1], notes });
-      i += notes.length;
-    } else if (doneMatch) {
-      const notes = collectNotes(lines, i);
-      tasks.push({ line: i, status: "done", raw: doneMatch[1], notes });
-      i += notes.length;
+// Lean overview by default: open (+ proposed) tasks only, one compact line each
+// with note counts (not bodies). Done tasks hidden; full context via get_task.
+server.tool(
+  "list_tasks",
+  "Lean overview of tasks from ~/scheduler/todos.md: open (and proposed) tasks, one compact line each with note counts (not bodies). Done tasks hidden by default. Use get_task for a task's full notes/context. Options: include_done (bool), include_notes (bool).",
+  {
+    include_done: z.boolean().optional().describe("Also list completed tasks (default false)"),
+    include_notes: z.boolean().optional().describe("Inline each task's note bodies (default false — counts only)"),
+  },
+  ({ include_done, include_notes }) => {
+    const lines = readLines();
+    const open = [], proposed = [], done = [];
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i].trim();
+      let bucket = null, prefix = null;
+      if (t.startsWith("- [ ] ")) { bucket = open; prefix = "- [ ] "; }
+      else if (t.startsWith("- [?] ")) { bucket = proposed; prefix = "- [?] "; }
+      else if (t.startsWith("- [x] ")) { bucket = done; prefix = "- [x] "; }
+      if (bucket) {
+        const notes = collectNotes(lines, i);
+        bucket.push({ raw: cleanRaw(t.slice(prefix.length)), notes });
+        i += notes.length;
+      }
     }
+    let out = "";
+    const render = (heading, items) => {
+      out += `${heading} (${items.length}):\n`;
+      if (items.length === 0) out += "  (none)\n";
+      for (const { raw, notes } of items) {
+        out += `- ${raw}`;
+        if (notes.length) out += `  [${notes.length} note${notes.length === 1 ? "" : "s"}]`;
+        out += "\n";
+        if (include_notes) for (const n of notes) out += `    ${n}\n`;
+      }
+    };
+    render("Open", open);
+    if (proposed.length) render("Proposed (awaiting human review)", proposed);
+    if (include_done) render("Done", done);
+    else if (done.length) out += `(${done.length} done hidden — pass include_done:true to show)\n`;
+    if (!include_notes) out += "Use get_task(title) for a task's full notes/context.\n";
+    return { content: [{ type: "text", text: out }] };
   }
-  return { content: [{ type: "text", text: JSON.stringify(tasks, null, 2) }] };
-});
+);
+
+// Full detail of one task on demand (title + all notes/context).
+server.tool(
+  "get_task",
+  "Full detail of one task (by title partial match), including all its notes/context. Use after list_tasks when you need a specific task's context.",
+  { title: z.string().describe("Task title or partial match") },
+  ({ title }) => {
+    const lines = readLines();
+    const lower = title.toLowerCase();
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i].trim();
+      const isTask = t.startsWith("- [ ] ") || t.startsWith("- [x] ") || t.startsWith("- [?] ");
+      if (isTask && t.toLowerCase().includes(lower)) {
+        const notes = collectNotes(lines, i);
+        let out = `${cleanRaw(t)}\n`;
+        if (notes.length === 0) out += "(no notes)\n";
+        else { out += "notes:\n"; for (const n of notes) out += `  - ${n}\n`; }
+        return { content: [{ type: "text", text: out }] };
+      }
+    }
+    return { content: [{ type: "text", text: `No task matching "${title}" found` }] };
+  }
+);
 
 // Add a task (with optional notes)
 server.tool(
@@ -287,6 +344,52 @@ server.tool(
 
     writeFileSync(MEMORY_PATH, lines.join("\n"), "utf-8");
     return { content: [{ type: "text", text: `Project "${name}" set: priority ${priority}${deadline ? `, deadline ${deadline}` : ""}` }] };
+  }
+);
+
+// Capture an idea to ideas.md (DayPilot Ideas tab), matching IdeasParser's
+// `<!-- id: … created: … -->` + `## Title` + body block format.
+function deriveIdeaTitle(body) {
+  const first = (body.split("\n").find((l) => l.trim()) || "Untitled").trim();
+  return first.length > 60 ? first.slice(0, 60).trim() + "…" : first;
+}
+
+function escapeIdeaBody(body) {
+  // A body line that's itself an entry header would split the idea on re-parse —
+  // break the match with a zero-width space after `<!--` (IdeasParser strips it).
+  return body
+    .split("\n")
+    .map((l) => (l.trim().startsWith("<!-- id:") ? l.replace("<!--", "<!--​") : l))
+    .join("\n");
+}
+
+function ideaTimestamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+server.tool(
+  "add_idea",
+  "Capture an idea/note to ~/scheduler/ideas.md (shown in DayPilot's Ideas tab). Use for thoughts that aren't tasks yet. Fields: body (the idea), title (optional — derived from the body if omitted).",
+  {
+    body: z.string().describe("The idea text (can be multiple lines)"),
+    title: z.string().optional().describe("Optional short title; derived from body if omitted"),
+  },
+  ({ body, title }) => {
+    ensureDir();
+    const t = (title || "").trim();
+    const b = (body || "").trim();
+    if (!t && !b) return { content: [{ type: "text", text: "Error: title or body is required" }] };
+    const finalTitle = t || deriveIdeaTitle(b);
+    const id = randomUUID().replace(/-/g, "").slice(0, 8).toLowerCase();
+    let content = existsSync(IDEAS_PATH) ? readFileSync(IDEAS_PATH, "utf-8") : "";
+    if (!content) content = "# Ideas\n";
+    if (!content.endsWith("\n")) content += "\n";
+    content += `\n<!-- id: ${id} created: ${ideaTimestamp()} -->\n## ${finalTitle}\n`;
+    if (b) content += escapeIdeaBody(b) + "\n";
+    writeFileSync(IDEAS_PATH, content, "utf-8");
+    return { content: [{ type: "text", text: `Idea saved: ${finalTitle}` }] };
   }
 );
 
