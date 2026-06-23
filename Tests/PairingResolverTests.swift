@@ -22,7 +22,16 @@ struct PairingResolverTests {
         #expect(PairingResolver.decide(from: "A", localName: "B", trusted: false, hasOutgoingInvite: true) == .acceptIncoming)
     }
 
-    @Test func trustWinsEvenWhenBothInvited() {
-        #expect(PairingResolver.decide(from: "B", localName: "A", trusted: true, hasOutgoingInvite: true) == .autoAccept)
+    @Test func trustedReconnectAutoAcceptsWhenOnlyTheyInvited() {
+        // Classic silent reconnect: they invited, we didn't → just accept.
+        #expect(PairingResolver.decide(from: "B", localName: "A", trusted: true, hasOutgoingInvite: false) == .autoAccept)
+    }
+
+    @Test func trustedSimultaneousInviteStillResolvesByTiebreak() {
+        // On reconnect BOTH trusted peers auto-invite, so trust must not short-
+        // circuit to autoAccept — that double-accepts and collides. The tiebreak
+        // wins: lower name keeps its invite, higher accepts theirs.
+        #expect(PairingResolver.decide(from: "B", localName: "A", trusted: true, hasOutgoingInvite: true) == .rejectIncoming)
+        #expect(PairingResolver.decide(from: "A", localName: "B", trusted: true, hasOutgoingInvite: true) == .acceptIncoming)
     }
 }

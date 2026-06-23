@@ -63,6 +63,9 @@ final class PeerManager: NSObject {
     /// Peers we've sent an invitation to and are awaiting a verdict from. Used to
     /// detect simultaneous invites and resolve the collision deterministically.
     @ObservationIgnored private var outgoingInvites: Set<String> = []
+    /// Trusted peers with a reconnect attempt already scheduled, so a burst of
+    /// .notConnected events doesn't stack a storm of re-invites.
+    @ObservationIgnored private var reconnecting: Set<String> = []
     /// The todos.md owner — appends accepted tasks, reports checkbox flips back.
     @ObservationIgnored private weak var store: ScheduleStore?
     @ObservationIgnored private var attached = false
@@ -284,8 +287,25 @@ final class PeerManager: NSObject {
             if peers.contains(where: { $0.id == displayName }) {
                 setConnection(displayName, .discovered)
             }
+            if trusted.contains(displayName) { scheduleReconnect(displayName) }
         @unknown default:
             break
+        }
+    }
+
+    /// Re-invite a trusted peer a few seconds after a drop, once, if it's still
+    /// around and still disconnected. The browser also re-finds lost peers, but
+    /// a session can drop without the browser firing lostPeer — this covers that.
+    private func scheduleReconnect(_ displayName: String) {
+        guard !reconnecting.contains(displayName) else { return }
+        reconnecting.insert(displayName)
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            self.reconnecting.remove(displayName)
+            guard self.trusted.contains(displayName),
+                  self.peerIDs[displayName] != nil,
+                  !self.session.connectedPeers.contains(where: { $0.displayName == displayName }) else { return }
+            self.pair(with: displayName)
         }
     }
 
@@ -293,9 +313,13 @@ final class PeerManager: NSObject {
         guard displayName != localName else { return }
         peerIDs[displayName] = peerID
         upsertPeer(displayName, connection: .discovered)
-        // Silent reconnect: a single deterministic initiator (lower name) invites
-        // so both ends don't race to connect.
-        if trusted.contains(displayName), localName < displayName {
+        // Silent reconnect: a trusted peer is re-invited the moment we see it.
+        // BOTH ends invite (whoever discovers first wins); PairingResolver dedupes
+        // the simultaneous case so they don't collide. Inviting from both sides
+        // matters because AWDL discovery timing is asymmetric — waiting on one
+        // fixed initiator can stall the reconnect for a long time.
+        if trusted.contains(displayName),
+           !session.connectedPeers.contains(where: { $0.displayName == displayName }) {
             pair(with: displayName)
         }
     }

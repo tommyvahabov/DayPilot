@@ -15,10 +15,13 @@ enum PairingResolver {
     /// the lower name keeps its own outgoing invite and rejects the incoming one,
     /// the higher name drops its invite and accepts — so exactly one channel forms.
     static func decide(from peer: String, localName: String, trusted: Bool, hasOutgoingInvite: Bool) -> PairingDecision {
-        if trusted { return .autoAccept }
+        // Tiebreak first: if we also invited them (both sides auto-invite on
+        // reconnect), only one connection may form — even for trusted peers,
+        // where blindly accepting would collide.
         if hasOutgoingInvite {
             return localName < peer ? .rejectIncoming : .acceptIncoming
         }
+        if trusted { return .autoAccept }
         return .prompt
     }
 }
